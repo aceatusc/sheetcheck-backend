@@ -68,9 +68,9 @@ def _call_openai(user_prompt: str) -> str:
 
 
 def _call_mistralai(user_prompt: str) -> str:
-    from mistralai import MistralAI
-    client = MistralAI(api_key=MISTRAL_API_KEY)
-    response = client.chat.completions.create(
+    from mistralai import Mistral
+    client = Mistral(api_key=MISTRAL_API_KEY)
+    response = client.chat.complete(
         model=MISTRAL_MODEL,
         max_tokens=4096,
         messages=[
