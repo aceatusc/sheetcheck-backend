@@ -76,4 +76,5 @@ def chat():
 
 app.register_blueprint(addin)
 if __name__ == "__main__":
+    print(f"Running in LLM TEST_MODE={TEST_MODE}.")
     app.run(host="0.0.0.0", port=8883, debug=True)

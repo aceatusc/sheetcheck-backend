@@ -2,6 +2,9 @@
 # Configuration
 # ---------------------------------------------------------------------------
 import os
+from dotenv import load_dotenv
+
+load_dotenv('../.env')
 
 # Shared secret checked against the X-Addin-Secret header sent by llmClient.js
 # Must match SHARED_SECRET in modules/llmClient.js
@@ -9,15 +12,15 @@ SHARED_SECRET = "my-super-secret-2025"
 
 # When True, /addin/chat always returns STUB_SEGMENTS — no LLM is called.
 # Flip to False when you are ready to use a real LLM.
-TEST_MODE = os.environ.get("SHEETCHECK_ADDIN_BACKEND_TEST", True)
+TEST_MODE = os.getenv("SHEETCHECK_ADDIN_BACKEND_TEST", True)
 
 # Pick your LLM provider: "anthropic" | "openai" | "mistralai"
 LLM_PROVIDER = "mistralai"
 
 # API keys — prefer env vars in production
-ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "PLACEHOLDER_ANTHROPIC_KEY")
-OPENAI_API_KEY    = os.environ.get("OPENAI_API_KEY",    "PLACEHOLDER_OPENAI_KEY")
-MISTRAL_API_KEY   = os.environ.get("MISTRAL_API_KEY",    "PLACEHOLDER_OPENAI_KEY")
+ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "PLACEHOLDER_ANTHROPIC_KEY")
+OPENAI_API_KEY    = os.getenv("OPENAI_API_KEY",    "PLACEHOLDER_OPENAI_KEY")
+MISTRAL_API_KEY   = os.getenv("MISTRAL_API_KEY",    "PLACEHOLDER_OPENAI_KEY")
 
 # Models
 ANTHROPIC_MODEL = "claude-opus-4-5"

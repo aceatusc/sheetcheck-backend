@@ -10,4 +10,5 @@ dependencies = [
     "flask-cors>=6.0.2",
     "mistralai>=1.12.4",
     "openai>=2.26.0",
+    "python-dotenv>=1.2.2",
 ]
