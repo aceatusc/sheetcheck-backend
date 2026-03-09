@@ -46,7 +46,7 @@ def _call_anthropic(user_prompt: str) -> str:
     client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
     message = client.messages.create(
         model=ANTHROPIC_MODEL,
-        max_tokens=4096,
+        # max_tokens=4096,
         system=SYSTEM_PROMPT,
         messages=[{"role": "user", "content": user_prompt}],
     )
@@ -58,7 +58,7 @@ def _call_openai(user_prompt: str) -> str:
     client = OpenAI(api_key=OPENAI_API_KEY)
     response = client.chat.completions.create(
         model=OPENAI_MODEL,
-        max_tokens=4096,
+        # max_tokens=4096,
         messages=[
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user",   "content": user_prompt},
@@ -72,7 +72,7 @@ def _call_mistralai(user_prompt: str) -> str:
     client = Mistral(api_key=MISTRAL_API_KEY)
     response = client.chat.complete(
         model=MISTRAL_MODEL,
-        max_tokens=4096,
+        # max_tokens=4096,
         messages=[
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user",   "content": user_prompt},
