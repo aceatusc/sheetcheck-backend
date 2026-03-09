@@ -4,7 +4,7 @@ server.py
 Lightweight Flask proxy that sits between the SheetCheck front
 and the LLM API.  Responsibilities:
   - Authenticate requests via a shared secret header
-  - Return stub segments when TEST_MODE is True (no LLM called)
+  - Return stub segments when failed or user text is 'test' (no LLM called)
   - Build the system prompt with worksheet context
   - Call the LLM API
   - Parse the response into a CodeSegment[] JSON array
@@ -14,7 +14,7 @@ and the LLM API.  Responsibilities:
 from flask import Flask, Blueprint, jsonify, request
 from flask_cors import CORS
 
-from params import SHARED_SECRET, TEST_MODE, STUB_SEGMENTS
+from params import SHARED_SECRET, STUB_SEGMENTS
 from utils import build_user_prompt, call_llm, parse_segments
 
 # ---------------------------------------------------------------------------
@@ -32,7 +32,7 @@ addin = Blueprint("addin", __name__, url_prefix="/addin")
 
 @addin.route("/health", methods=["GET"])
 def health():
-    return jsonify({"status": "ok", "test_mode": TEST_MODE})
+    return jsonify({"status": "ok"})
 
 
 @addin.route("/chat", methods=["POST"])
@@ -54,8 +54,8 @@ def chat():
         return jsonify({"error": "message is required"}), 400
 
     # ── Test mode: return stub without calling the LLM ────────────────────────
-    if TEST_MODE:
-        return jsonify({"segments": STUB_SEGMENTS, "test_mode": True})
+    if user_message.lower() == "test":
+        return jsonify({"segments": STUB_SEGMENTS})
 
     # ── Build prompt and call LLM ─────────────────────────────────────────────
     user_prompt = build_user_prompt(user_message, ws_context)
@@ -76,5 +76,4 @@ def chat():
 
 app.register_blueprint(addin)
 if __name__ == "__main__":
-    print(f"Running in LLM TEST_MODE={TEST_MODE}.")
     app.run(host="0.0.0.0", port=8883, debug=True)

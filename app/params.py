@@ -10,10 +10,6 @@ load_dotenv('../.env')
 # Must match SHARED_SECRET in modules/llmClient.js
 SHARED_SECRET = "my-super-secret-2025"
 
-# When True, /addin/chat always returns STUB_SEGMENTS — no LLM is called.
-# Flip to False when you are ready to use a real LLM.
-TEST_MODE = os.getenv("SHEETCHECK_ADDIN_BACKEND_TEST", True)
-
 # Pick your LLM provider: "anthropic" | "openai" | "mistralai"
 LLM_PROVIDER = "mistralai"
 
@@ -60,7 +56,7 @@ Use it to write accurate range addresses and avoid overwriting existing data.
 
 
 # ---------------------------------------------------------------------------
-# Stub segments  (used when TEST_MODE = True)
+# Stub segments
 # ---------------------------------------------------------------------------
 
 STUB_SEGMENTS = [
