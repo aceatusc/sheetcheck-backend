@@ -24,8 +24,8 @@ ANTHROPIC_MODEL = "claude-opus-4-5"
 OPENAI_MODEL    = "gpt-4o"
 # MISTRAL_MODEL   = "mistral-small-2506"
 MISTRAL_MODEL   = "mistral-large-2512"
-GEMINI_MODEL    = "gemini-2.5-flash"
-# GEMINI_MODEL    = "gemini-3-flash-preview"
+# GEMINI_MODEL    = "gemini-2.5-flash" # Not so good at robust JS code generation (failed in 2/3 attempts). In the successful example the background and text color was the same
+GEMINI_MODEL    = "gemini-3-flash-preview"
 
 # ---------------------------------------------------------------------------
 # System prompt
