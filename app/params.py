@@ -21,7 +21,8 @@ MISTRAL_API_KEY   = os.getenv("MISTRAL_API_KEY",    "PLACEHOLDER_OPENAI_KEY")
 # Models
 ANTHROPIC_MODEL = "claude-opus-4-5"
 OPENAI_MODEL    = "gpt-4o"
-MISTRAL_MODEL   = "mistral-small-2506" # "mistral-large-2512"
+# MISTRAL_MODEL   = "mistral-small-2506"
+MISTRAL_MODEL   = "mistral-large-2512"
 
 # ---------------------------------------------------------------------------
 # System prompt
