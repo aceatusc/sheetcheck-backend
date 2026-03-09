@@ -98,7 +98,6 @@ Additional code rules:
 Worksheet context provided by the user is attached below as JSON.
 Use it to write accurate range addresses and avoid overwriting existing data.
 """
-# TODO: include Examples if needed
 
 
 # ---------------------------------------------------------------------------
