@@ -9,7 +9,7 @@ SHARED_SECRET = "my-super-secret-2025"
 
 # When True, /addin/chat always returns STUB_SEGMENTS — no LLM is called.
 # Flip to False when you are ready to use a real LLM.
-TEST_MODE = True
+TEST_MODE = os.environ.get("SHEETCHECK_ADDIN_BACKEND_TEST", True)
 
 # Pick your LLM provider: "anthropic" | "openai" | "mistralai"
 LLM_PROVIDER = "mistralai"
@@ -53,6 +53,7 @@ Rules for the "code" field:
 Worksheet context provided by the user is attached below as JSON.
 Use it to write accurate range addresses and avoid overwriting existing data.
 """
+# TODO: include Examples if needed
 
 
 # ---------------------------------------------------------------------------
