@@ -10,19 +10,22 @@ load_dotenv('../.env')
 # Must match SHARED_SECRET in modules/llmClient.js
 SHARED_SECRET = "my-super-secret-2025"
 
-# Pick your LLM provider: "anthropic" | "openai" | "mistralai"
-LLM_PROVIDER = "mistralai"
+# Pick your LLM provider: "anthropic" | "openai" | "mistralai" | "google"
+LLM_PROVIDER = "google"
 
 # API keys — prefer env vars in production
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "PLACEHOLDER_ANTHROPIC_KEY")
 OPENAI_API_KEY    = os.getenv("OPENAI_API_KEY",    "PLACEHOLDER_OPENAI_KEY")
-MISTRAL_API_KEY   = os.getenv("MISTRAL_API_KEY",    "PLACEHOLDER_OPENAI_KEY")
+MISTRAL_API_KEY   = os.getenv("MISTRAL_API_KEY",   "PLACEHOLDER_OPENAI_KEY")
+GEMINI_API_KEY    = os.getenv("GEMINI_API_KEY",    "PLACEHOLDER_GEMINI_KEY")
 
 # Models
 ANTHROPIC_MODEL = "claude-opus-4-5"
 OPENAI_MODEL    = "gpt-4o"
 # MISTRAL_MODEL   = "mistral-small-2506"
 MISTRAL_MODEL   = "mistral-large-2512"
+GEMINI_MODEL    = "gemini-2.5-flash"
+# GEMINI_MODEL    = "gemini-3-flash-preview"
 
 # ---------------------------------------------------------------------------
 # System prompt

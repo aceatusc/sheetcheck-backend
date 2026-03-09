@@ -8,11 +8,13 @@ from params import (
     ANTHROPIC_API_KEY,
     OPENAI_API_KEY,
     MISTRAL_API_KEY,
+    GEMINI_API_KEY,
 )
 from params import (
     ANTHROPIC_MODEL,
     OPENAI_MODEL,
     MISTRAL_MODEL,
+    GEMINI_MODEL,
 )
 
 # ---------------------------------------------------------------------------
@@ -37,6 +39,8 @@ def call_llm(user_prompt: str) -> str:
         return _call_openai(user_prompt)
     elif LLM_PROVIDER == "mistralai":
         return _call_mistralai(user_prompt)
+    elif LLM_PROVIDER == "google":
+        return _call_google(user_prompt)
     else:
         raise ValueError(f"Unknown LLM_PROVIDER: {LLM_PROVIDER}")
 
@@ -79,6 +83,20 @@ def _call_mistralai(user_prompt: str) -> str:
         ],
     )
     return response.choices[0].message.content
+
+
+def _call_google(user_prompt: str) -> str:
+    from google import genai
+    from google.genai import types
+    client = genai.Client(api_key=GEMINI_API_KEY)
+    chat = client.chats.create(
+        model=GEMINI_MODEL,
+        config=types.GenerateContentConfig(
+            system_instruction=SYSTEM_PROMPT
+        )
+    )
+    response = chat.send_message(user_prompt)
+    return response.text
 
 # ---------------------------------------------------------------------------
 # Response parser
