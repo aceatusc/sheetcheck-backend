@@ -13,7 +13,7 @@ Routes:
 from flask import Flask, Blueprint, jsonify, request
 from flask_cors import CORS
 
-from params import SHARED_SECRET, STUB_SEGMENTS, STUB_RUBRIC
+from params import SHARED_SECRET, STUB_SEGMENTS, STUB_RUBRIC, STUB_ASK, STUB_EDIT, STUB_VERIFY
 from utils import build_user_prompt, call_llm, parse_segments, parse_json
 
 app   = Flask(__name__)
@@ -54,7 +54,7 @@ def code():
     if not message:
         return jsonify({"error":"message is required"}), 400
 
-    if message.lower() == "test": # just for test
+    if message.lower() == "test":
         return jsonify({"segments": STUB_SEGMENTS})
 
     extra = {"rubric": rubric} if rubric else None
@@ -76,10 +76,13 @@ def ask():
 
     message  = body.get("message","").strip()
     context  = body.get("context", {})
-    step     = body.get("step", {})       # current segment description+explanation
-    history  = body.get("history", [])    # prior Q&A pairs in this thread
+    step     = body.get("step", {})
+    history  = body.get("history", [])
     if not message:
         return jsonify({"error":"message is required"}), 400
+
+    if message.lower() == "test":
+        return jsonify(STUB_ASK)
 
     extra = {"current_step": step, "conversation_history": history}
     prompt = build_user_prompt(message, context, extra)
@@ -103,6 +106,9 @@ def edit():
     original_segment  = body.get("segment", {})
     preferred_alt_id  = body.get("preferred_alt_id", None)
 
+    if message.lower() == "test":
+        return jsonify({"segment": STUB_EDIT})
+
     extra = {"original_segment": original_segment, "preferred_alternative": preferred_alt_id, "user_feedback": message}
     prompt = build_user_prompt(message or "Apply user feedback to this segment.", context, extra)
     try:
@@ -122,8 +128,9 @@ def rubric_scaffold():
 
     message = body.get("message","").strip()
     context = body.get("context", {})
-    if not message:
-        return jsonify(STUB_RUBRIC)  # return stub if no task description given
+
+    if not message or message.lower() == "test":
+        return jsonify(STUB_RUBRIC)
 
     prompt = build_user_prompt(message, context)
     try:
@@ -143,6 +150,10 @@ def rubric_verify():
 
     rubric  = body.get("rubric", {})
     context = body.get("context", {})
+
+    # Stub: if the rubric matches the default stub structure, return stub results
+    if not context.get("sheetData"):
+        return jsonify({"results": STUB_VERIFY})
 
     extra = {"rubric": rubric}
     prompt = build_user_prompt("Verify the worksheet satisfies each rubric item.", context, extra)
@@ -165,6 +176,9 @@ def chat():
     context = body.get("context", {})
     if not message:
         return jsonify({"error":"message is required"}), 400
+
+    if message.lower() == "test":
+        return jsonify({"response": "[stub] The assistant is ready to help with your spreadsheet questions!"})
 
     prompt = build_user_prompt(message, context)
     try:

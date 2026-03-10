@@ -385,3 +385,23 @@ STUB_RUBRIC = {
         {"id": "s4", "label": "Column widths are readable without scrolling", "checked": False},
     ],
 }
+
+STUB_ASK = {
+    "answer": "[test] The LLM would explain the design choice for this step in detail.",
+    "follow_up_questions": [
+        "Why was this range chosen?",
+        "Can this be done differently?",
+    ],
+}
+
+STUB_EDIT = STUB_SEGMENTS[1]  # Return seg-2 as an edited segment stub
+
+STUB_VERIFY = [
+    {"id": "h1", "met": True,  "reasoning": "Row 1 contains Month, Revenue, Expenses, Profit, Growth % labels.", "references": ["A1:E1"]},
+    {"id": "h2", "met": True,  "reasoning": "Rows 2–7 are populated with Jan–Jun data.", "references": ["A2:A7"]},
+    {"id": "h3", "met": True,  "reasoning": "$#,##0 format applied to B2:D7.", "references": ["B2:D7"]},
+    {"id": "s1", "met": True,  "reasoning": "Dark header row contrasts with white/blue data rows.", "references": ["A1:E1"]},
+    {"id": "s2", "met": True,  "reasoning": "E3:E7 contains growth % formulas with percentage formatting.", "references": ["E3:E7"]},
+    {"id": "s3", "met": True,  "reasoning": "Row 8 contains TOTAL with SUM formulas.", "references": ["A8:E8"]},
+    {"id": "s4", "met": False, "reasoning": "autofitColumns was called but column A may still be too narrow for 'GRAND TOTAL'.", "references": ["A8"]},
+]
