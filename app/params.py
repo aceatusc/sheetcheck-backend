@@ -78,7 +78,6 @@ Code field rules:
 - Do not include markdown backticks or text outside the JSON array
 """
 
-# TODO: they may need improvements in case of 
 SYSTEM_PROMPTS = {
 
 "code": """You are an Excel automation assistant. The user will describe a change they want made to their spreadsheet. You must respond with ONLY a valid JSON array
@@ -260,18 +259,18 @@ STUB_SEGMENTS = [
         ],
         "alternatives":  [
             {"id":"alt-1","label":"Profit growth (default)","probability":0.5,
-             "code": 'await Excel.run(async (ctx) => { const s=ctx.workbook.worksheets.getActiveWorksheet(); s.getRange("E3:E7").formulas=[["=IFERROR((D3-D2)/D2,\"\")"],["=IFERROR((D4-D3)/D3,\"\")"],["=IFERROR((D5-D4)/D4,\"\")"],["=IFERROR((D6-D5)/D5,\"\")"],["=IFERROR((D7-D6)/D6,\"\")"]]; s.getRange("E3:E7").numberFormat=[["0.0%"],["0.0%"],["0.0%"],["0.0%"],["0.0%"]]; await ctx.sync(); });'},
+             "code": "await Excel.run(async (ctx) => { const s=ctx.workbook.worksheets.getActiveWorksheet(); s.getRange('E3:E7').formulas=[['=IFERROR((D3-D2)/D2,\"\")'],['=IFERROR((D4-D3)/D3,\"\")'],['=IFERROR((D5-D4)/D4,\"\")'],['=IFERROR((D6-D5)/D5,\"\")'],['=IFERROR((D7-D6)/D6,\"\")']];\ns.getRange('E3:E7').numberFormat=[['0.0%'],['0.0%'],['0.0%'],['0.0%'],['0.0%']]; await ctx.sync(); });"},
             {"id":"alt-2","label":"Revenue growth","probability":0.3,
-             "code": 'await Excel.run(async (ctx) => { const s=ctx.workbook.worksheets.getActiveWorksheet(); s.getRange("E3:E7").formulas=[["=IFERROR((B3-B2)/B2,\"\")"],["=IFERROR((B4-B3)/B3,\"\")"],["=IFERROR((B5-B4)/B4,\"\")"],["=IFERROR((B6-B5)/B5,\"\")"],["=IFERROR((B7-B6)/B6,\"\")"]]; s.getRange("E3:E7").numberFormat=[["0.0%"],["0.0%"],["0.0%"],["0.0%"],["0.0%"]]; await ctx.sync(); });'},
+             "code": "await Excel.run(async (ctx) => { const s=ctx.workbook.worksheets.getActiveWorksheet(); s.getRange('E3:E7').formulas=[['=IFERROR((B3-B2)/B2,\"\")'],['=IFERROR((B4-B3)/B3,\"\")'],['=IFERROR((B5-B4)/B4,\"\")'],['=IFERROR((B6-B5)/B5,\"\")'],['=IFERROR((B7-B6)/B6,\"\")']];\ns.getRange('E3:E7').numberFormat=[['0.0%'],['0.0%'],['0.0%'],['0.0%'],['0.0%']]; await ctx.sync(); });"},
             {"id":"alt-3","label":"Profit margin %","probability":0.2,
-             "code": 'await Excel.run(async (ctx) => { const s=ctx.workbook.worksheets.getActiveWorksheet(); s.getRange("E2:E7").formulas=[["=IFERROR(D2/B2,\"\")"],["=IFERROR(D3/B3,\"\")"],["=IFERROR(D4/B4,\"\")"],["=IFERROR(D5/B5,\"\")"],["=IFERROR(D6/B6,\"\")"],["=IFERROR(D7/B7,\"\")"]]; s.getRange("E2:E7").numberFormat=[["0.0%"],["0.0%"],["0.0%"],["0.0%"],["0.0%"],["0.0%"]]; await ctx.sync(); });'},
+             "code": "await Excel.run(async (ctx) => { const s=ctx.workbook.worksheets.getActiveWorksheet(); s.getRange('E2:E7').formulas=[['=IFERROR(D2/B2,\"\")'],['=IFERROR(D3/B3,\"\")'],['=IFERROR(D4/B4,\"\")'],['=IFERROR(D5/B5,\"\")'],['=IFERROR(D6/B6,\"\")'],['=IFERROR(D7/B7,\"\")']];\ns.getRange('E2:E7').numberFormat=[['0.0%'],['0.0%'],['0.0%'],['0.0%'],['0.0%'],['0.0%']]; await ctx.sync(); });"},
         ],
         "qa_pairs": [
             {"q":"Why skip E2?","a":"January has no prior month, so the growth formula would divide by zero; IFERROR handles it but leaving E2 blank is cleaner."},
             {"q":"Why IFERROR?","a":"Protects against division-by-zero if any profit value is 0."},
         ],
-        "undo_code": 'await Excel.run(async (ctx) => { ctx.workbook.worksheets.getActiveWorksheet().getRange("E2:E7").clear(); await ctx.sync(); });',
-        "code": 'await Excel.run(async (ctx) => { const sheet=ctx.workbook.worksheets.getActiveWorksheet(); sheet.getRange("E3:E7").formulas=[["=IFERROR((D3-D2)/D2,\"\")"],["=IFERROR((D4-D3)/D3,\"\")"],["=IFERROR((D5-D4)/D4,\"\")"],["=IFERROR((D6-D5)/D5,\"\")"],["=IFERROR((D7-D6)/D6,\"\")"]]; sheet.getRange("E3:E7").numberFormat=[["0.0%"],["0.0%"],["0.0%"],["0.0%"],["0.0%"]]; await ctx.sync(); });',
+        "undo_code": "await Excel.run(async (ctx) => { ctx.workbook.worksheets.getActiveWorksheet().getRange('E2:E7').clear(); await ctx.sync(); });",
+        "code": "await Excel.run(async (ctx) => { const sheet=ctx.workbook.worksheets.getActiveWorksheet(); sheet.getRange('E3:E7').formulas=[['=IFERROR((D3-D2)/D2,\"\")'],['=IFERROR((D4-D3)/D3,\"\")'],['=IFERROR((D5-D4)/D4,\"\")'],['=IFERROR((D6-D5)/D5,\"\")'],['=IFERROR((D7-D6)/D6,\"\")']];\nsheet.getRange('E3:E7').numberFormat=[['0.0%'],['0.0%'],['0.0%'],['0.0%'],['0.0%']]; await ctx.sync(); });",
     },
     {
         "id":            "seg-5",
