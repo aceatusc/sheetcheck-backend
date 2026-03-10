@@ -74,6 +74,45 @@ def chat():
     return jsonify({"segments": segments})
 
 
+@addin.route("/code", methods=["POST"])
+def code():
+    # ── Auth ──────────────────────────────────────────────────────────────────
+    secret = request.headers.get("X-Addin-Secret", "")
+    if secret != SHARED_SECRET:
+        return jsonify({"error": "Unauthorized"}), 401
+
+    # ── Parse body ────────────────────────────────────────────────────────────
+    body = request.get_json(silent=True)
+    if not body:
+        return jsonify({"error": "Invalid JSON body"}), 400
+
+    user_message = body.get("message", "").strip()
+    ws_context   = body.get("context", {})
+
+    if not user_message:
+        return jsonify({"error": "message is required"}), 400
+
+    # ── Test mode: return stub without calling the LLM ────────────────────────
+    if user_message.lower() == "test":
+        return jsonify({"segments": STUB_SEGMENTS})
+
+    # ── Build prompt and call LLM ─────────────────────────────────────────────
+    user_prompt = build_user_prompt(user_message, ws_context)
+
+    try:
+        raw_text = call_llm(user_prompt)
+    except Exception as exc:
+        return jsonify({"error": f"LLM call failed: {exc}"}), 502
+
+    try:
+        segments = parse_segments(raw_text)
+    except Exception as exc:
+        return jsonify({"error": f"Could not parse LLM response: {exc}",
+                        "raw": raw_text}), 422
+
+    return jsonify({"segments": segments})
+
+
 app.register_blueprint(addin)
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8883, debug=True)
