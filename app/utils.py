@@ -1,119 +1,86 @@
-""" Server Utilities."""
+"""Server utilities — LLM call dispatch."""
 
 import json
 import re
 
-from params import LLM_PROVIDER, SYSTEM_PROMPT
-from params import (
-    ANTHROPIC_API_KEY,
-    OPENAI_API_KEY,
-    MISTRAL_API_KEY,
-    GEMINI_API_KEY,
-)
-from params import (
-    ANTHROPIC_MODEL,
-    OPENAI_MODEL,
-    MISTRAL_MODEL,
-    GEMINI_MODEL,
-)
+from params import Provider, ENDPOINT_MODELS, SYSTEM_PROMPTS
+from params import ANTHROPIC_API_KEY, OPENAI_API_KEY, MISTRAL_API_KEY, GEMINI_API_KEY
 
-# ---------------------------------------------------------------------------
-# Prompt builder
-# ---------------------------------------------------------------------------
 
-def build_user_prompt(user_message: str, ws_context: dict) -> str:
+def build_user_prompt(user_message: str, ws_context: dict, extra: dict = None) -> str:
     ctx_block = json.dumps(ws_context, indent=2) if ws_context else "{}"
-    return (
-        f"Worksheet context:\n```json\n{ctx_block}\n```\n\n"
-        f"User request: {user_message}"
-    )
+    parts = [f"Worksheet context:\n```json\n{ctx_block}\n```\n\nUser request: {user_message}"]
+    if extra:
+        parts.append(f"\nExtra context:\n```json\n{json.dumps(extra, indent=2)}\n```")
+    return "\n".join(parts)
 
-# ---------------------------------------------------------------------------
-# LLM call
-# ---------------------------------------------------------------------------
 
-def call_llm(user_prompt: str) -> str:
-    if LLM_PROVIDER == "anthropic":
-        return _call_anthropic(user_prompt)
-    elif LLM_PROVIDER == "openai":
-        return _call_openai(user_prompt)
-    elif LLM_PROVIDER == "mistralai":
-        return _call_mistralai(user_prompt)
-    elif LLM_PROVIDER == "google":
-        return _call_google(user_prompt)
+def call_llm(endpoint: str, user_prompt: str) -> str:
+    cfg = ENDPOINT_MODELS[endpoint]
+    system = SYSTEM_PROMPTS[endpoint]
+    if cfg.provider == Provider.ANTHROPIC:
+        return _call_anthropic(system, user_prompt, cfg.model)
+    elif cfg.provider == Provider.OPENAI:
+        return _call_openai(system, user_prompt, cfg.model)
+    elif cfg.provider == Provider.MISTRAL:
+        return _call_mistralai(system, user_prompt, cfg.model)
+    elif cfg.provider == Provider.GOOGLE:
+        return _call_google(system, user_prompt, cfg.model)
     else:
-        raise ValueError(f"Unknown LLM_PROVIDER: {LLM_PROVIDER}")
+        raise ValueError(f"Unknown provider: {cfg.provider}")
 
 
-def _call_anthropic(user_prompt: str) -> str:
+def _call_anthropic(system: str, user_prompt: str, model: str) -> str:
     import anthropic
     client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
-    message = client.messages.create(
-        model=ANTHROPIC_MODEL,
-        # max_tokens=4096,
-        system=SYSTEM_PROMPT,
-        messages=[{"role": "user", "content": user_prompt}],
-    )
-    return message.content[0].text
+    msg = client.messages.create(model=model, max_tokens=8096, system=system,
+                                  messages=[{"role":"user","content":user_prompt}])
+    return msg.content[0].text
 
 
-def _call_openai(user_prompt: str) -> str:
+def _call_openai(system: str, user_prompt: str, model: str) -> str:
     from openai import OpenAI
     client = OpenAI(api_key=OPENAI_API_KEY)
-    response = client.chat.completions.create(
-        model=OPENAI_MODEL,
-        # max_tokens=4096,
-        messages=[
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user",   "content": user_prompt},
-        ],
-    )
-    return response.choices[0].message.content
+    r = client.chat.completions.create(model=model, max_tokens=8096,
+        messages=[{"role":"system","content":system},{"role":"user","content":user_prompt}])
+    return r.choices[0].message.content
 
 
-def _call_mistralai(user_prompt: str) -> str:
+def _call_mistralai(system: str, user_prompt: str, model: str) -> str:
     from mistralai import Mistral
     client = Mistral(api_key=MISTRAL_API_KEY)
-    response = client.chat.complete(
-        model=MISTRAL_MODEL,
-        # max_tokens=4096,
-        messages=[
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user",   "content": user_prompt},
-        ],
-    )
-    return response.choices[0].message.content
+    r = client.chat.complete(model=model,
+        messages=[{"role":"system","content":system},{"role":"user","content":user_prompt}])
+    return r.choices[0].message.content
 
 
-def _call_google(user_prompt: str) -> str:
+def _call_google(system: str, user_prompt: str, model: str) -> str:
     from google import genai
     from google.genai import types
     client = genai.Client(api_key=GEMINI_API_KEY)
-    chat = client.chats.create(
-        model=GEMINI_MODEL,
-        config=types.GenerateContentConfig(
-            system_instruction=SYSTEM_PROMPT
-        )
-    )
-    response = chat.send_message(user_prompt)
-    return response.text
+    chat = client.chats.create(model=model,
+        config=types.GenerateContentConfig(system_instruction=system))
+    return chat.send_message(user_prompt).text
 
-# ---------------------------------------------------------------------------
-# Response parser
-# ---------------------------------------------------------------------------
 
-def parse_segments(raw_text: str) -> list:
+def parse_json(raw_text: str):
     cleaned = re.sub(r"^```(?:json)?\s*", "", raw_text.strip(), flags=re.IGNORECASE)
     cleaned = re.sub(r"\s*```$", "", cleaned.strip())
+    return json.loads(cleaned)
 
-    segments = json.loads(cleaned)
+
+def parse_segments(raw_text: str) -> list:
+    segments = parse_json(raw_text)
     if not isinstance(segments, list):
         raise ValueError("LLM response is not a JSON array")
-
-    required_fields = {"id", "description", "sheet_context", "explanation", "code"}
+    required = {"id","description","sheet_context","explanation","code"}
     for i, seg in enumerate(segments):
-        missing = required_fields - seg.keys()
+        missing = required - seg.keys()
         if missing:
             raise ValueError(f"Segment {i} missing fields: {missing}")
-
+        seg.setdefault("predecessors", [])
+        seg.setdefault("affordances", [])
+        seg.setdefault("alternatives", [])
+        seg.setdefault("qa_pairs", [])
+        seg.setdefault("undo_code", "")
     return segments
