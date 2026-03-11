@@ -109,6 +109,14 @@ Code field rules:
 - Do not import anything; Excel and Office globals are available
 - Do not include markdown backticks or text outside the JSON array
 - If you use sheet.getUsedRange(), you MUST call await ctx.sync() immediately before it if you have just assigned values to the sheet. You cannot reference the "Used Range" of data that hasn't been synchronized yet.
+- THE MERGE RULE:
+If a range is merged (e.g., A1:E1), you MUST still provide an array matching the full dimensions.
+Wrong: range("A1:E1").values = [["Title"]]
+Right: range("A1:E1").values = [["Title", "", "", "", ""]]
+- THE SINGLE-VALUE SHORTCUT:
+To avoid dimension math errors when applying the SAME value or format to a large range, do not use an array. Assign the value directly to the property.
+Better: range.numberFormat = "yyyy-mm-dd"; (This applies the format to every cell in the range automatically without needing a 2-D array).
+Better: range.values = "Pending"; (This fills the entire range with the word "Pending").
 """
 
 SYSTEM_PROMPTS = {
