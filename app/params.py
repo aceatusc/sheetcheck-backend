@@ -38,7 +38,7 @@ ENDPOINT_MODELS = {
     "code":           EndpointConfig(Provider.GOOGLE, Model.GEMINI_3),
     "ask":            EndpointConfig(Provider.MISTRAL, Model.MISTRAL_SMALL),
     "edit":           EndpointConfig(Provider.GOOGLE, Model.GEMINI_3),
-    "rubric_scaffold":EndpointConfig(Provider.MISTRAL, Model.MISTRAL_LARGE),
+    "rubric_scaffold":EndpointConfig(Provider.MISTRAL, Model.MISTRAL_SMALL),
     "rubric_verify":  EndpointConfig(Provider.MISTRAL, Model.MISTRAL_SMALL),
     "chat":           EndpointConfig(Provider.MISTRAL, Model.MISTRAL_SMALL),
 }
