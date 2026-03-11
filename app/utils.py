@@ -10,8 +10,9 @@ from params import ANTHROPIC_API_KEY, OPENAI_API_KEY, MISTRAL_API_KEY, GEMINI_AP
 def build_user_prompt(user_message: str, ws_context: dict, extra: dict = None) -> str:
     ctx_block = json.dumps(ws_context, indent=2) if ws_context else "{}"
     parts = [f"Worksheet context:\n```json\n{ctx_block}\n```\n\nUser request: {user_message}"]
-    if extra:
-        parts.append(f"\nExtra context:\n```json\n{json.dumps(extra, indent=2)}\n```")
+    # TODO: Rubric is turned off for test
+    # if extra:
+    #     parts.append(f"\nExtra context:\n```json\n{json.dumps(extra, indent=2)}\n```")
     return "\n".join(parts)
 
 
