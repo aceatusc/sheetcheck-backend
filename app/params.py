@@ -108,6 +108,7 @@ Code field rules:
 - MUST use: await Excel.run(async (ctx) => { ... await ctx.sync(); })
 - Do not import anything; Excel and Office globals are available
 - Do not include markdown backticks or text outside the JSON array
+- If you use sheet.getUsedRange(), you MUST call await ctx.sync() immediately before it if you have just assigned values to the sheet. You cannot reference the "Used Range" of data that hasn't been synchronized yet.
 """
 
 SYSTEM_PROMPTS = {
