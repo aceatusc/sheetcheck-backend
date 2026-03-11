@@ -57,17 +57,49 @@ _ARRAY_RULES = """
 CRITICAL: 2-D ARRAY DIMENSION RULES (violations cause runtime errors)
 
 Every array assigned to .values, .formulas, or .numberFormat MUST be a 2-D
-array whose dimensions EXACTLY match the range [rows][cols].
+array whose dimensions EXACTLY match the range: [rows][cols].
+
+Count the rows and columns of the range BEFORE writing the array.
 
   Range A1:E1  -> 1 row,  5 cols  -> [[ v1, v2, v3, v4, v5 ]]
   Range A1:A5  -> 5 rows, 1 col   -> [[ v1 ], [ v2 ], [ v3 ], [ v4 ], [ v5 ]]
   Range B2:D4  -> 3 rows, 3 cols  -> [[ v,v,v ], [ v,v,v ], [ v,v,v ]]
 
-SELF-CHECK before emitting each segment:
-  1. Write down the range e.g. "B2:D7"
-  2. rows = last_row - first_row + 1,  cols = last_col_letter - first_col_letter + 1
-  3. Verify your array has exactly that many inner arrays, each with that many elements.
-  4. If counts do not match, fix the array before emitting JSON.
+CORRECT examples:
+
+  // 1 row, 3 cols
+  sheet.getRange("A1:C1").values = [["Month", "Revenue", "Profit"]];
+
+  // 4 rows, 1 col — numberFormat must repeat per row
+  sheet.getRange("B2:B5").numberFormat = [["$#,##0"], ["$#,##0"], ["$#,##0"], ["$#,##0"]];
+
+  // 3 rows, 2 cols
+  sheet.getRange("C2:D4").numberFormat = [
+      ["0.0%", "$#,##0"],
+      ["0.0%", "$#,##0"],
+      ["0.0%", "$#,##0"],
+  ];
+
+WRONG examples (these ALL throw "array doesn't match range dimensions"):
+
+  // Wrong: only 1 row given for a 4-row range
+  sheet.getRange("B2:B5").numberFormat = [["$#,##0"]];
+
+  // Wrong: only 1 col given for a 3-col range
+  sheet.getRange("B2:D7").numberFormat = [
+      ["$#,##0"], ["$#,##0"], ["$#,##0"],
+      ["$#,##0"], ["$#,##0"], ["$#,##0"],
+  ];
+
+  // Wrong: flat array instead of 2-D
+  sheet.getRange("A1:C1").values = ["Month", "Revenue", "Profit"];
+
+SELF-CHECK before finalising each segment:
+  1. Write down the range address, e.g. "B2:D7"
+  2. Count: rows = last_row - first_row + 1, cols = last_col - first_col + 1
+     Example: B2:D7 -> rows = 7-2+1 = 6, cols = D(4)-B(2)+1 = 3
+  3. Verify your array has exactly that many inner arrays, each with exactly that many elements.
+  4. If the counts do not match, fix the array before emitting JSON.
 """
 
 _CODE_RULES = """
