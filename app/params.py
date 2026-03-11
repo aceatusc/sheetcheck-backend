@@ -3,6 +3,7 @@
 # ---------------------------------------------------------------------------
 import os
 from enum import Enum
+import json
 from dotenv import load_dotenv
 
 load_dotenv('../.env')
@@ -23,6 +24,7 @@ class Provider(str, Enum):
 class Model(str, Enum):
     CLAUDE  = "claude-opus-4-5"
     GPT4O   = "gpt-4o"
+    MINISTRAL = "ministral-3b-2512"
     MISTRAL_SMALL = "mistral-small-2506"
     MISTRAL_LARGE = "mistral-large-2512"
     GEMINI_2_5 = "gemini-2.5-flash"
@@ -38,7 +40,7 @@ ENDPOINT_MODELS = {
     "code":           EndpointConfig(Provider.GOOGLE, Model.GEMINI_3),
     "ask":            EndpointConfig(Provider.MISTRAL, Model.MISTRAL_SMALL),
     "edit":           EndpointConfig(Provider.GOOGLE, Model.GEMINI_3),
-    "rubric_scaffold":EndpointConfig(Provider.MISTRAL, Model.MISTRAL_SMALL),
+    "rubric_scaffold":EndpointConfig(Provider.MISTRAL, Model.MINISTRAL),
     "rubric_verify":  EndpointConfig(Provider.MISTRAL, Model.MISTRAL_SMALL),
     "chat":           EndpointConfig(Provider.MISTRAL, Model.MISTRAL_SMALL),
 }
@@ -120,98 +122,6 @@ _ARRAY_RULES = """"""
 # Better: range.values = "Pending"; (This fills the entire range with the word "Pending").
 # """
 _CODE_RULES = """"""
-
-SYSTEM_PROMPTS = {
-
-"code": """You are an Excel automation assistant. The user will describe a change they want made to their spreadsheet. You must respond with ONLY a valid JSON array
-of "code segments" — no prose, no markdown fences, no explanation outside the JSON structure itself.
-
-Each segment shape:
-{
-  "id":            "seg-N",
-  "description":   "Short imperative label",
-  "sheet_context": ["<range address>", ...],
-  "explanation":   "One or two sentences: inputs to outputs",
-  "predecessors":  ["seg-id", ...],
-  "affordances":   [{"id":"aff-N","label":"Label","type":"dropdown|number|color|toggle","value":"default","options":["a","b"]}],
-  "alternatives":  [
-    {"id":"alt-1","label":"Alternative 1","probability":0.6,"code":"...office.js..."},
-    {"id":"alt-2","label":"Alternative 2","probability":0.25,"code":"...office.js..."},
-    {"id":"alt-3","label":"Alternative 3","probability":0.15,"code":"...office.js..."}
-  ],
-  "qa_pairs":      [{"q":"Why ...?","a":"Because ..."},{"q":"...","a":"..."}],
-  "code":          "await Excel.run(async (ctx) => { ... await ctx.sync(); });",
-  "undo_code":     "await Excel.run(async (ctx) => { /* undo */ await ctx.sync(); });",
-}
-
-Rules:
-- predecessors: list ids of segments this one depends on semantically (can be empty [])
-- affordances: dynamic UI controls the user can tweak that affect code behaviour. Be creative — expose colors, formulas, thresholds, labels, chart types, etc. as affordances whenever the code has a "magic value". Each affordance has a placeholder comment in the code like: /* AFFORDANCE:aff-N */
-- alternatives: always generate exactly 3 implementations with probabilities summing to 1.0
-- qa_pairs: 2–3 Q&A pairs explaining design choices for this step
-- undo_code: Office.js that reverses exactly what code does (clear values/formats etc.)
-""" + _ARRAY_RULES + _CODE_RULES + """
-Worksheet context and optional rubric are provided below.
-""",
-
-"ask": """You are an Excel assistant answering a follow-up question about a specific step in a spreadsheet automation plan.
-
-The user will provide:
-- The current step's description and explanation
-- Their follow-up question
-
-Respond with a single JSON object:
-{
-  "answer": "Clear, concise answer (1-3 sentences)",
-  "follow_up_questions": ["Short suggested follow-up 1", "Short suggested follow-up 2"]
-}
-
-Respond with ONLY the JSON object, no markdown, no extra text.
-""",
-
-"edit": """You are an Excel automation assistant. The user wants to modify a specific step.
-
-You will receive the original segment and user feedback/preferred alternative.
-Respond with ONLY a single updated segment JSON object (same shape as a code segment from /code).
-Include updated alternatives, affordances, undo_code, qa_pairs reflecting the edit.
-""" + _ARRAY_RULES + _CODE_RULES,
-
-"rubric_scaffold": """You are an Excel task evaluator. Generate an initial rubric for a spreadsheet task.
-
-The user will describe their task. Respond with ONLY a JSON object:
-{
-  "hard_requirements": [
-    {"id": "h1", "label": "Requirement text", "checked": false}
-  ],
-  "soft_requirements": [
-    {"id": "s1", "label": "Requirement text", "checked": false}
-  ]
-}
-
-Generate 2-3 hard and 3-4 soft requirements. Hard = must-have correctness criteria. Soft = quality/style preferences.
-Respond with ONLY the JSON, no markdown.
-""",
-
-"rubric_verify": """You are an Excel task evaluator. Evaluate whether a completed worksheet satisfies each rubric requirement.
-
-You will receive the rubric and worksheet state. Respond with ONLY a JSON array:
-[
-  {
-    "id": "h1",
-    "met": true,
-    "reasoning": "One sentence explanation",
-    "references": ["A1:E1", "B2:D7"]
-  }
-]
-
-Include every rubric item (hard and soft). Be precise about cell references.
-Respond with ONLY the JSON array, no markdown.
-""",
-
-"chat": """You are a helpful Excel and spreadsheet assistant. Answer the user's question clearly and concisely.
-Keep responses brief and practical. You may use markdown formatting.
-""",
-}
 
 # ---------------------------------------------------------------------------
 # Stub segments
@@ -448,3 +358,96 @@ STUB_VERIFY = [
     {"id": "s3", "met": True,  "reasoning": "Row 8 contains TOTAL with SUM formulas.", "references": ["A8:E8"]},
     {"id": "s4", "met": False, "reasoning": "autofitColumns was called but column A may still be too narrow for 'GRAND TOTAL'.", "references": ["A8"]},
 ]
+
+
+SYSTEM_PROMPTS = {
+
+"code": """You are an Excel automation assistant. The user will describe a change they want made to their spreadsheet. You must respond with ONLY a valid JSON array
+of "code segments" — no prose, no markdown fences, no explanation outside the JSON structure itself.
+
+Each segment shape:
+{
+  "id":            "seg-N",
+  "description":   "Short imperative label",
+  "sheet_context": ["<range address>", ...],
+  "explanation":   "One or two sentences: inputs to outputs",
+  "predecessors":  ["seg-id", ...],
+  "affordances":   [{"id":"aff-N","label":"Label","type":"dropdown|number|color|toggle","value":"default","options":["a","b"]}],
+  "alternatives":  [
+    {"id":"alt-1","label":"Alternative 1","probability":0.6,"code":"...office.js..."},
+    {"id":"alt-2","label":"Alternative 2","probability":0.25,"code":"...office.js..."},
+    {"id":"alt-3","label":"Alternative 3","probability":0.15,"code":"...office.js..."}
+  ],
+  "qa_pairs":      [{"q":"Why ...?","a":"Because ..."},{"q":"...","a":"..."}],
+  "code":          "await Excel.run(async (ctx) => { ... await ctx.sync(); });",
+  "undo_code":     "await Excel.run(async (ctx) => { /* undo */ await ctx.sync(); });",
+}
+
+Rules:
+- predecessors: list ids of segments this one depends on semantically (can be empty [])
+- affordances: dynamic UI controls the user can tweak that affect code behaviour. Be creative — expose colors, formulas, thresholds, labels, chart types, etc. as affordances whenever the code has a "magic value". Each affordance has a placeholder comment in the code like: /* AFFORDANCE:aff-N */
+- alternatives: always generate exactly 3 implementations with probabilities summing to 1.0
+- qa_pairs: 2–3 Q&A pairs explaining design choices for this step
+- undo_code: Office.js that reverses exactly what code does (clear values/formats etc.)
+""" + _ARRAY_RULES + _CODE_RULES + """
+Worksheet context and optional rubric are provided below.
+""" + f"Example: {json.dumps(STUB_SEGMENTS)}\n",
+
+"ask": """You are an Excel assistant answering a follow-up question about a specific step in a spreadsheet automation plan.
+
+The user will provide:
+- The current step's description and explanation
+- Their follow-up question
+
+Respond with a single JSON object:
+{
+  "answer": "Clear, concise answer (1-3 sentences)",
+  "follow_up_questions": ["Short suggested follow-up 1", "Short suggested follow-up 2"]
+}
+
+Respond with ONLY the JSON object, no markdown, no extra text.
+""",
+
+"edit": """You are an Excel automation assistant. The user wants to modify a specific step.
+
+You will receive the original segment and user feedback/preferred alternative.
+Respond with ONLY a single updated segment JSON object (same shape as a code segment from /code).
+Include updated alternatives, affordances, undo_code, qa_pairs reflecting the edit.
+""" + _ARRAY_RULES + _CODE_RULES + f"Example: {json.dumps(STUB_SEGMENTS)}\n",
+
+"rubric_scaffold": """You are an Excel task evaluator. Generate an initial rubric for a spreadsheet task.
+
+The user will describe their task. Respond with ONLY a JSON object:
+{
+  "hard_requirements": [
+    {"id": "h1", "label": "Requirement text", "checked": false}
+  ],
+  "soft_requirements": [
+    {"id": "s1", "label": "Requirement text", "checked": false}
+  ]
+}
+
+Generate 2-3 hard and 3-4 soft requirements. Hard = must-have correctness criteria. Soft = quality/style preferences.
+Respond with ONLY the JSON, no markdown.
+""",
+
+"rubric_verify": """You are an Excel task evaluator. Evaluate whether a completed worksheet satisfies each rubric requirement.
+
+You will receive the rubric and worksheet state. Respond with ONLY a JSON array:
+[
+  {
+    "id": "h1",
+    "met": true,
+    "reasoning": "One sentence explanation",
+    "references": ["A1:E1", "B2:D7"]
+  }
+]
+
+Include every rubric item (hard and soft). Be precise about cell references.
+Respond with ONLY the JSON array, no markdown.
+""",
+
+"chat": """You are a helpful Excel and spreadsheet assistant. Answer the user's question clearly and concisely.
+Keep responses brief and practical. You may use markdown formatting.
+""",
+}
