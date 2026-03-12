@@ -414,6 +414,23 @@ Respond with ONLY the JSON object, no markdown, no extra text.
 
 You will receive the original segment and user feedback/preferred alternative.
 Respond with ONLY a single updated segment JSON object (same shape as a code segment from /code).
+Segment shape:
+{
+  "id":            "seg-N",
+  "description":   "Short imperative label",
+  "sheet_context": ["<range address>", ...],
+  "explanation":   "One or two sentences: inputs to outputs",
+  "predecessors":  ["seg-id", ...],
+  "affordances":   [{"id":"aff-N","label":"Label","type":"dropdown|number|color|toggle","value":"default","options":["a","b"]}],
+  "alternatives":  [
+    {"id":"alt-1","label":"Alternative 1","probability":0.6,"code":"...office.js..."},
+    {"id":"alt-2","label":"Alternative 2","probability":0.25,"code":"...office.js..."},
+    {"id":"alt-3","label":"Alternative 3","probability":0.15,"code":"...office.js..."}
+  ],
+  "qa_pairs":      [{"q":"Why ...?","a":"Because ..."},{"q":"...","a":"..."}],
+  "code":          "await Excel.run(async (ctx) => { ... await ctx.sync(); });",
+  "undo_code":     "await Excel.run(async (ctx) => { /* undo */ await ctx.sync(); });",
+}
 Include updated alternatives, affordances, undo_code, qa_pairs reflecting the edit.
 """ + _ARRAY_RULES + _CODE_RULES + f"Example: {json.dumps(STUB_SEGMENTS)}\n",
 
