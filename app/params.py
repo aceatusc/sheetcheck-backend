@@ -28,7 +28,9 @@ class Model(str, Enum):
     MISTRAL_SMALL = "mistral-small-2506"
     MISTRAL_LARGE = "mistral-large-2512"
     GEMINI_2_5 = "gemini-2.5-flash"
-    GEMINI_3 = "gemini-3-flash-preview"
+    GEMINI_3_FLASH = "gemini-3-flash-preview"
+    GEMINI_3_1_FLASH_LITE = "gemini-3.1-flash-lite-preview"
+    GEMINI_3_1_PRO = "gemini-3.1-pro-preview"
 
 # Per-endpoint config: each API can use a different provider/model
 class EndpointConfig:
@@ -37,9 +39,9 @@ class EndpointConfig:
         self.model    = model
 
 ENDPOINT_MODELS = {
-    "code":           EndpointConfig(Provider.GOOGLE, Model.GEMINI_3),
+    "code":           EndpointConfig(Provider.GOOGLE, Model.GEMINI_3_FLASH),
     "ask":            EndpointConfig(Provider.MISTRAL, Model.MISTRAL_SMALL),
-    "edit":           EndpointConfig(Provider.GOOGLE, Model.GEMINI_3),
+    "edit":           EndpointConfig(Provider.GOOGLE, Model.GEMINI_3_FLASH),
     "rubric_scaffold":EndpointConfig(Provider.MISTRAL, Model.MINISTRAL),
     "rubric_verify":  EndpointConfig(Provider.MISTRAL, Model.MISTRAL_SMALL),
     "chat":           EndpointConfig(Provider.MISTRAL, Model.MISTRAL_SMALL),
