@@ -39,9 +39,9 @@ class EndpointConfig:
         self.model    = model
 
 ENDPOINT_MODELS = {
-    "code":           EndpointConfig(Provider.GOOGLE, Model.GEMINI_3_1_PRO),
+    "code":           EndpointConfig(Provider.GOOGLE, Model.GEMINI_3_FLASH),
     "ask":            EndpointConfig(Provider.MISTRAL, Model.MISTRAL_SMALL),
-    "edit":           EndpointConfig(Provider.GOOGLE, Model.GEMINI_3_1_PRO),
+    "edit":           EndpointConfig(Provider.GOOGLE, Model.GEMINI_3_FLASH),
     "rubric_scaffold":EndpointConfig(Provider.MISTRAL, Model.MINISTRAL),
     "rubric_verify":  EndpointConfig(Provider.MISTRAL, Model.MISTRAL_SMALL),
     "chat":           EndpointConfig(Provider.MISTRAL, Model.MISTRAL_SMALL),
