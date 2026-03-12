@@ -136,5 +136,5 @@ def log_error(endpoint: str, exc: Exception, raw: str = None):
         "traceback": traceback.format_exc(),
     }
     if raw:
-        record.extra["raw_preview"] = raw[:300]
+        record.extra["raw"] = raw
     _logger.handle(record)
