@@ -374,21 +374,13 @@ Each segment shape:
   "sheet_context": ["<range address>", ...],
   "explanation":   "One or two sentences: inputs to outputs",
   "predecessors":  ["seg-id", ...],
-  "alternatives":  [
-    {"id":"alt-1","label":"Alternative 1","probability":0.6,"code":"...office.js..."},
-    {"id":"alt-2","label":"Alternative 2","probability":0.25,"code":"...office.js..."},
-    {"id":"alt-3","label":"Alternative 3","probability":0.15,"code":"...office.js..."}
-  ],
   "qa_pairs":      [{"q":"Why ...?","a":"Because ..."},{"q":"...","a":"..."}],
   "code":          "await Excel.run(async (ctx) => { ... await ctx.sync(); });",
-  "undo_code":     "await Excel.run(async (ctx) => { /* undo */ await ctx.sync(); });",
 }
 
 Rules:
 - predecessors: list ids of segments this one depends on semantically (can be empty [])
-- alternatives: always generate exactly 3 implementations with probabilities summing to 1.0
 - qa_pairs: 2–3 Q&A pairs explaining design choices for this step
-- undo_code: Office.js that reverses exactly what code does (clear values/formats etc.)
 """ + _ARRAY_RULES + _CODE_RULES + """
 Worksheet context and optional rubric are provided below.
 """ + f"Example: {json.dumps(STUB_SEGMENTS)}\n",
@@ -412,7 +404,7 @@ Respond with ONLY the JSON object, no markdown, no extra text.
 
 You will receive the original segment and user feedback/preferred alternative.
 Respond with ONLY a single updated segment JSON object (same shape as a code segment from /code).
-Include updated alternatives, undo_code, qa_pairs reflecting the edit.
+Include updated qa_pairs reflecting the edit.
 """ + _ARRAY_RULES + _CODE_RULES + f"Example: {json.dumps(STUB_SEGMENTS)}\n",
 
 "rubric_scaffold": """You are an Excel task evaluator. Generate an initial rubric for a spreadsheet task.
