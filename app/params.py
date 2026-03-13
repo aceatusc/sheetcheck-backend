@@ -374,7 +374,6 @@ Each segment shape:
   "sheet_context": ["<range address>", ...],
   "explanation":   "One or two sentences: inputs to outputs",
   "predecessors":  ["seg-id", ...],
-  "affordances":   [{"id":"aff-N","label":"Label","type":"dropdown|number|color|toggle","value":"default","options":["a","b"]}],
   "alternatives":  [
     {"id":"alt-1","label":"Alternative 1","probability":0.6,"code":"...office.js..."},
     {"id":"alt-2","label":"Alternative 2","probability":0.25,"code":"...office.js..."},
@@ -387,7 +386,6 @@ Each segment shape:
 
 Rules:
 - predecessors: list ids of segments this one depends on semantically (can be empty [])
-- affordances: dynamic UI controls the user can tweak that affect code behaviour. Be creative — expose colors, formulas, thresholds, labels, chart types, etc. as affordances whenever the code has a "magic value". Each affordance has a placeholder comment in the code like: /* AFFORDANCE:aff-N */
 - alternatives: always generate exactly 3 implementations with probabilities summing to 1.0
 - qa_pairs: 2–3 Q&A pairs explaining design choices for this step
 - undo_code: Office.js that reverses exactly what code does (clear values/formats etc.)
@@ -414,7 +412,7 @@ Respond with ONLY the JSON object, no markdown, no extra text.
 
 You will receive the original segment and user feedback/preferred alternative.
 Respond with ONLY a single updated segment JSON object (same shape as a code segment from /code).
-Include updated alternatives, affordances, undo_code, qa_pairs reflecting the edit.
+Include updated alternatives, undo_code, qa_pairs reflecting the edit.
 """ + _ARRAY_RULES + _CODE_RULES + f"Example: {json.dumps(STUB_SEGMENTS)}\n",
 
 "rubric_scaffold": """You are an Excel task evaluator. Generate an initial rubric for a spreadsheet task.
