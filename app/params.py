@@ -41,9 +41,9 @@ class EndpointConfig:
         self.model    = model
 
 ENDPOINT_MODELS = {
-    "code":           EndpointConfig(Provider.GOOGLE, Model.CLAUDE_HAIKU),
+    "code":           EndpointConfig(Provider.ANTHROPIC, Model.CLAUDE_HAIKU),
     "ask":            EndpointConfig(Provider.MISTRAL, Model.MISTRAL_SMALL),
-    "edit":           EndpointConfig(Provider.GOOGLE, Model.CLAUDE_HAIKU),
+    "edit":           EndpointConfig(Provider.ANTHROPIC, Model.CLAUDE_HAIKU),
     "rubric_scaffold":EndpointConfig(Provider.MISTRAL, Model.MINISTRAL),
     "rubric_verify":  EndpointConfig(Provider.MISTRAL, Model.MISTRAL_SMALL),
     "chat":           EndpointConfig(Provider.MISTRAL, Model.MISTRAL_SMALL),
