@@ -22,7 +22,9 @@ class Provider(str, Enum):
     GOOGLE    = "google"
 
 class Model(str, Enum):
-    CLAUDE  = "claude-opus-4-5"
+    CLAUDE_OPUS  = "claude-opus-4-6"
+    CLAUDE_SONNET = "claude-sonnet-4-6"
+    CLAUDE_HAIKU = "claude-haiku-4-5"
     GPT4O   = "gpt-4o"
     MINISTRAL = "ministral-3b-2512"
     MISTRAL_SMALL = "mistral-small-2506"
