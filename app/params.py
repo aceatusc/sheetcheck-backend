@@ -279,7 +279,7 @@ STUB_ASK = {
     ],
 }
 
-STUB_EDIT = STUB_SEGMENTS[1]  # Return seg-2 as an edited segment stub
+STUB_EDIT = STUB_SEGMENTS[1:3]  # Return seg-2 + seg-3 as the edited chain stub
 
 STUB_VERIFY = [
     {"id": "h1", "met": True,  "reasoning": "Row 1 contains Month, Revenue, Expenses, Profit, Growth % labels.", "references": ["A1:E1"]},
@@ -339,12 +339,22 @@ Respond with a single JSON object:
 Respond with ONLY the JSON object, no markdown, no extra text.
 """,
 
-"edit": """You are an Excel automation assistant. The user wants to modify a specific step.
+"edit": """You are an Excel automation assistant. The user wants to modify a specific step in a multi-step spreadsheet automation.
 
-You will receive the original segment and user feedback/preferred alternative.
-Respond with ONLY a single updated segment JSON object (same shape as a code segment from /code).
-Include updated alternatives, affordances, undo_code, qa_pairs reflecting the edit.
-""" + f"Example: {json.dumps(STUB_SEGMENTS[0])}\n",
+You will receive:
+- The segment to edit (the step the user is currently viewing)
+- The remaining_segments that follow it (may be empty)
+- The user's feedback describing the change
+
+Your job is to:
+1. Produce an updated version of the edited segment reflecting the user's feedback
+2. Regenerate all remaining_segments so they are consistent with the edit
+
+Respond with ONLY a JSON array of code segments starting from the edited step, followed by the regenerated remainder.
+The array must have the same length as 1 + len(remaining_segments).
+Each segment must have the same structure as segments from /code (id, description, explanation, code, undo_code, sheet_context, affordances, qa_pairs, predecessors).
+Do NOT include markdown fences or any text outside the JSON array.
+""" + f"Example single-segment edit response: {json.dumps([STUB_EDIT])}\n",
 
 "rubric_scaffold": """You are an Excel task evaluator. Generate an initial rubric for a spreadsheet task.
 

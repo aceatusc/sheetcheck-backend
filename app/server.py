@@ -105,25 +105,32 @@ def edit():
     body, err = _body();
     if err: return err
 
-    message           = body.get("message","").strip()
-    context           = body.get("context", {})
-    original_segment  = body.get("segment", {})
-    preferred_alt_id  = body.get("preferred_alt_id", None)
+    message            = body.get("message", "").strip()
+    context            = body.get("context", {})
+    original_segment   = body.get("segment", {})
+    remaining_segments = body.get("remaining_segments", [])
 
     if message.lower() == "test":
-        return jsonify({"segment": STUB_EDIT})
+        return jsonify({"segments": STUB_EDIT})
 
-    extra = {"original_segment": original_segment, "preferred_alternative": preferred_alt_id, "user_feedback": message}
-    prompt = build_user_prompt(message or "Apply user feedback to this segment.", context, extra)
+    extra = {
+        "original_segment":   original_segment,
+        "remaining_segments": remaining_segments,
+        "user_feedback":      message,
+    }
+    prompt = build_user_prompt(
+        message or "Apply user feedback to this segment and regenerate the remainder.",
+        context, extra
+    )
     try:
-        raw     = call_llm("edit", prompt)
-        segment = parse_json(raw)
+        raw      = call_llm("edit", prompt)
+        segments = parse_segments(raw)
     except Exception as exc:
         print(raw)
         print(str(exc))
-        return jsonify({"error": str(exc)}), 502
+        return jsonify({"error": str(exc), "raw": raw[:300]}), 502
 
-    return jsonify({"segment": segment})
+    return jsonify({"segments": segments})
 
 
 @addin.route("/rubric/scaffold", methods=["POST"])
