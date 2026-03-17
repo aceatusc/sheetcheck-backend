@@ -63,6 +63,8 @@ def code():
         raw = call_llm("code", prompt)
         segments = parse_segments(raw)
     except Exception as exc:
+        print(raw)
+        print(str(exc))
         return jsonify({"error": str(exc)}), 502
 
     return jsonify({"segments": segments})
@@ -90,6 +92,8 @@ def ask():
         raw    = call_llm("ask", prompt)
         result = parse_json(raw)
     except Exception as exc:
+        print(raw)
+        print(str(exc))
         return jsonify({"error": str(exc)}), 502
 
     return jsonify(result)
@@ -115,6 +119,8 @@ def edit():
         raw     = call_llm("edit", prompt)
         segment = parse_json(raw)
     except Exception as exc:
+        print(raw)
+        print(str(exc))
         return jsonify({"error": str(exc)}), 502
 
     return jsonify({"segment": segment})
@@ -137,6 +143,8 @@ def rubric_scaffold():
         raw    = call_llm("rubric_scaffold", prompt)
         rubric = parse_json(raw)
     except Exception as exc:
+        print(raw)
+        print(str(exc))
         return jsonify({"error": str(exc)}), 502
 
     return jsonify(rubric)
@@ -161,6 +169,8 @@ def rubric_verify():
         raw    = call_llm("rubric_verify", prompt)
         result = parse_json(raw)
     except Exception as exc:
+        print(raw)
+        print(str(exc))
         return jsonify({"error": str(exc)}), 502
 
     return jsonify({"results": result})
@@ -184,6 +194,8 @@ def chat():
     try:
         raw = call_llm("chat", prompt)
     except Exception as exc:
+        print(raw)
+        print(str(exc))
         return jsonify({"error": str(exc)}), 502
 
     return jsonify({"response": raw})

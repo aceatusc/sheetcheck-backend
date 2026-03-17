@@ -22,7 +22,9 @@ class Provider(str, Enum):
     GOOGLE    = "google"
 
 class Model(str, Enum):
-    CLAUDE  = "claude-opus-4-5"
+    CLAUDE_OPUS  = "claude-opus-4-6"
+    CLAUDE_SONNET = "claude-sonnet-4-6"
+    CLAUDE_HAIKU = "claude-haiku-4-5"
     GPT4O   = "gpt-4o"
     MINISTRAL = "ministral-3b-2512"
     MISTRAL_SMALL = "mistral-small-2506"
@@ -41,7 +43,7 @@ class EndpointConfig:
 ENDPOINT_MODELS = {
     "code":           EndpointConfig(Provider.GOOGLE, Model.GEMINI_3_FLASH),
     "ask":            EndpointConfig(Provider.MISTRAL, Model.MISTRAL_SMALL),
-    "edit":           EndpointConfig(Provider.GOOGLE, Model.GEMINI_3_FLASH),
+    "edit":           EndpointConfig(Provider.GOOGLE, Model.GEMINI_3_1_FLASH_LITE),
     "rubric_scaffold":EndpointConfig(Provider.MISTRAL, Model.MINISTRAL),
     "rubric_verify":  EndpointConfig(Provider.MISTRAL, Model.MISTRAL_SMALL),
     "chat":           EndpointConfig(Provider.MISTRAL, Model.MISTRAL_SMALL),
