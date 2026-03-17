@@ -43,7 +43,7 @@ class EndpointConfig:
 ENDPOINT_MODELS = {
     "code":           EndpointConfig(Provider.GOOGLE, Model.GEMINI_3_FLASH),
     "ask":            EndpointConfig(Provider.MISTRAL, Model.MISTRAL_SMALL),
-    "edit":           EndpointConfig(Provider.GOOGLE, Model.GEMINI_3_1_FLASH_LITE),
+    "edit":           EndpointConfig(Provider.GOOGLE, Model.GEMINI_3_FLASH),
     "rubric_scaffold":EndpointConfig(Provider.MISTRAL, Model.MINISTRAL),
     "rubric_verify":  EndpointConfig(Provider.MISTRAL, Model.MISTRAL_SMALL),
     "chat":           EndpointConfig(Provider.MISTRAL, Model.MISTRAL_SMALL),
@@ -70,7 +70,6 @@ STUB_SEGMENTS = [
             {"q":"Why 5 columns?","a":"Revenue, Expenses, and Profit together give a complete P&L picture; Growth % adds a trend indicator."},
             {"q":"Why start in A1?","a":"Starting at the top-left keeps the table anchored and makes formulas simpler."},
         ],
-        "undo_code": 'await Excel.run(async (ctx) => { ctx.workbook.worksheets.getActiveWorksheet().getRange("A1:E1").clear(); await ctx.sync(); });',
         "code": 'await Excel.run(async (ctx) => { const sheet = ctx.workbook.worksheets.getActiveWorksheet(); sheet.getRange("A1:E1").values = [["Month","Revenue","Expenses","Profit","Growth %"]]; await ctx.sync(); });',
     },
     {
@@ -82,7 +81,6 @@ STUB_SEGMENTS = [
         "qa_pairs": [
             {"q":"Why dark background?","a":"High contrast between header and data rows helps users quickly identify column names."},
         ],
-        "undo_code": 'await Excel.run(async (ctx) => { const h = ctx.workbook.worksheets.getActiveWorksheet().getRange("A1:E1"); h.format.fill.color=""; h.format.font.color=""; h.format.font.bold=false; await ctx.sync(); });',
         "code": 'await Excel.run(async (ctx) => { const sheet=ctx.workbook.worksheets.getActiveWorksheet(); const header=sheet.getRange("A1:E1"); header.format.fill.color="#1a1d27"; header.format.font.color="#4f8ef7"; header.format.font.bold=true; header.format.font.size=11; header.format.horizontalAlignment="Center"; await ctx.sync(); });',
     },
     {
@@ -94,7 +92,6 @@ STUB_SEGMENTS = [
         "qa_pairs": [
             {"q":"Why leave column E blank?","a":"Growth % requires the previous month's value to exist first; we add those formulas in the dedicated next step."},
         ],
-        "undo_code": 'await Excel.run(async (ctx) => { ctx.workbook.worksheets.getActiveWorksheet().getRange("A2:E7").clear(); await ctx.sync(); });',
         "code": 'await Excel.run(async (ctx) => { const sheet=ctx.workbook.worksheets.getActiveWorksheet(); sheet.getRange("A2:E7").values=[["Jan",142000,98000,44000,""],["Feb",158000,104000,54000,""],["Mar",175000,110000,65000,""],["Apr",163000,107000,56000,""],["May",191000,115000,76000,""],["Jun",210000,121000,89000,""]]; await ctx.sync(); });',
     },
     {
@@ -107,7 +104,6 @@ STUB_SEGMENTS = [
             {"q":"Why skip E2?","a":"January has no prior month, so the growth formula would divide by zero; IFERROR handles it but leaving E2 blank is cleaner."},
             {"q":"Why IFERROR?","a":"Protects against division-by-zero if any profit value is 0."},
         ],
-        "undo_code": "await Excel.run(async (ctx) => { ctx.workbook.worksheets.getActiveWorksheet().getRange('E2:E7').clear(); await ctx.sync(); });",
         "code": "await Excel.run(async (ctx) => { const sheet=ctx.workbook.worksheets.getActiveWorksheet(); sheet.getRange('E3:E7').formulas=[['=IFERROR((D3-D2)/D2,\"\")'],['=IFERROR((D4-D3)/D3,\"\")'],['=IFERROR((D5-D4)/D4,\"\")'],['=IFERROR((D6-D5)/D5,\"\")'],['=IFERROR((D7-D6)/D6,\"\")']];\nsheet.getRange('E3:E7').numberFormat=[['0.0%'],['0.0%'],['0.0%'],['0.0%'],['0.0%']]; await ctx.sync(); });",
     },
     {
@@ -119,7 +115,6 @@ STUB_SEGMENTS = [
         "qa_pairs": [
             {"q":"Why $#,##0 over $#,##0.00?","a":"Financial summaries typically round to whole dollars for readability; individual transactions warrant cents."},
         ],
-        "undo_code": 'await Excel.run(async (ctx) => { ctx.workbook.worksheets.getActiveWorksheet().getRange("B2:D7").numberFormat=null; await ctx.sync(); });',
         "code": 'await Excel.run(async (ctx) => { const sheet=ctx.workbook.worksheets.getActiveWorksheet(); sheet.getRange("B2:D7").numberFormat=[["$#,##0","$#,##0","$#,##0"],["$#,##0","$#,##0","$#,##0"],["$#,##0","$#,##0","$#,##0"],["$#,##0","$#,##0","$#,##0"],["$#,##0","$#,##0","$#,##0"],["$#,##0","$#,##0","$#,##0"]]; await ctx.sync(); });',
     },
     {
@@ -131,7 +126,6 @@ STUB_SEGMENTS = [
         "qa_pairs": [
             {"q":"Why alternating colors?","a":"Zebra striping reduces eye tracking errors when reading across wide rows."},
         ],
-        "undo_code": 'await Excel.run(async (ctx) => { ctx.workbook.worksheets.getActiveWorksheet().getRange("A2:E7").format.fill.color=""; await ctx.sync(); });',
         "code": 'await Excel.run(async (ctx) => { const sheet=ctx.workbook.worksheets.getActiveWorksheet(); for(let i=2;i<=7;i++){sheet.getRange("A"+i+":E"+i).format.fill.color=i%2===0?"#f5f7ff":"#ffffff";} await ctx.sync(); });',
     },
     {
@@ -143,7 +137,6 @@ STUB_SEGMENTS = [
         "qa_pairs": [
             {"q":"Why bold for high values?","a":"Double encoding (color + weight) helps users with color vision deficiency."},
         ],
-        "undo_code": 'await Excel.run(async (ctx) => { const r=ctx.workbook.worksheets.getActiveWorksheet().getRange("D2:D7"); r.format.font.color=""; r.format.font.bold=false; await ctx.sync(); });',
         "code": 'await Excel.run(async (ctx) => { const sheet=ctx.workbook.worksheets.getActiveWorksheet(); const profit=sheet.getRange("D2:D7"); profit.load("values"); await ctx.sync(); profit.values.forEach((row,i)=>{const cell=sheet.getRange("D"+(i+2)); cell.format.font.color=row[0]>=60000?"#1a7a4a":"#b94040"; cell.format.font.bold=row[0]>=60000;}); await ctx.sync(); });',
     },
     {
@@ -156,7 +149,6 @@ STUB_SEGMENTS = [
             {"q":"Why autofitColumns last?","a":"All data must exist before fitting, otherwise columns are sized to empty cells."},
             {"q":"Why SUM not SUBTOTAL?","a":"SUBTOTAL respects filters, but for a simple 6-row table SUM is clearer and more expected."},
         ],
-        "undo_code": 'await Excel.run(async (ctx) => { ctx.workbook.worksheets.getActiveWorksheet().getRange("A8:E9").clear(); await ctx.sync(); });',
         "code": 'await Excel.run(async (ctx) => { const sheet=ctx.workbook.worksheets.getActiveWorksheet(); sheet.getRange("A8").values=[["TOTAL"]]; sheet.getRange("B8:D8").formulas=[["=SUM(B2:B7)","=SUM(C2:C7)","=SUM(D2:D7)"]]; sheet.getRange("B8:D8").numberFormat=[["$#,##0","$#,##0","$#,##0"]]; const t=sheet.getRange("A8:E8"); t.format.fill.color="#1a1d27"; t.format.font.color="#ffffff"; t.format.font.bold=true; sheet.getRange("A1:E8").getEntireColumn().format.autofitColumns(); await ctx.sync(); });',
     },
 ]
@@ -210,14 +202,12 @@ Each segment shape:
   "predecessors":  ["seg-id", ...],
   "qa_pairs":      [{"q":"Why ...?","a":"Because ..."},{"q":"...","a":"..."}],
   "code":          "await Excel.run(async (ctx) => { ... await ctx.sync(); });",
-  "undo_code":     "await Excel.run(async (ctx) => { /* undo */ await ctx.sync(); });",
 }
 
 Rules:
 - predecessors: list ids of segments this one depends on semantically (can be empty [])
 - qa_pairs: 2-3 Q&A pairs explaining design choices for this step
-- undo_code: Office.js that reverses exactly what code does (clear values/formats etc.)
-Worksheet context and optional rubric are provided below.
+Worksheet context are provided below.
 """ + f"Example: {json.dumps(STUB_SEGMENTS)}\n",
 
 "ask": """You are an Excel assistant answering a follow-up question about a specific step in a spreadsheet automation plan.
@@ -234,21 +224,22 @@ Respond with a single JSON object:
 
 Respond with ONLY the JSON object, no markdown, no extra text.
 """,
-"edit": """You are an Excel automation assistant. The user wants to modify a specific step in a multi-step spreadsheet automation.
+"edit": """You are an Excel automation assistant. The user wants to modify a step in a multi-step spreadsheet automation.
 
 You will receive:
 - The segment to edit (the step the user is currently viewing)
+- The remaining_segments that follow it (may be empty)
 - The user's feedback describing the change
-- The current worksheet context
 
 Your job is to:
 1. Produce an updated version of the edited segment reflecting the user's feedback
-2. Generate a complete new path of all remaining steps needed to finish the task from that point onward
+2. Regenerate all remaining_segments so they are consistent with the edit
 
-Respond with ONLY a JSON array of code segments starting from the edited step through to the final step of the task.
-Each segment must have the same structure as segments from /code (id, description, explanation, code, undo_code, sheet_context, qa_pairs, predecessors).
+Respond with ONLY a JSON array of code segments starting from the edited step, followed by the regenerated remainder.
+The array must have the same length as 1 + len(remaining_segments).
+Each segment must have the same structure as segments from /code (id, description, explanation, code, sheet_context, qa_pairs, predecessors).
 Do NOT include markdown fences or any text outside the JSON array.
-""" + f"Example response: {json.dumps(STUB_SEGMENTS[2:])}\n",
+""" + f"Example single-segment edit response: {json.dumps([STUB_EDIT])}\n",
 
 "rubric_scaffold": """You are an Excel task evaluator. Generate an initial rubric for a spreadsheet task.
 
