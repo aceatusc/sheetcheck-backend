@@ -42,11 +42,11 @@ class EndpointConfig:
 
 ENDPOINT_MODELS = {
     "code":           EndpointConfig(Provider.GOOGLE, Model.GEMINI_3_FLASH),
-    "ask":            EndpointConfig(Provider.MISTRAL, Model.GEMINI_3_1_FLASH_LITE),
+    "ask":            EndpointConfig(Provider.MISTRAL, Model.MINISTRAL),
     "edit":           EndpointConfig(Provider.GOOGLE, Model.GEMINI_3_1_FLASH_LITE),
-    "rubric_scaffold":EndpointConfig(Provider.MISTRAL, Model.GEMINI_3_1_FLASH_LITE),
-    "rubric_verify":  EndpointConfig(Provider.MISTRAL, Model.GEMINI_3_1_FLASH_LITE),
-    "chat":           EndpointConfig(Provider.MISTRAL, Model.GEMINI_3_1_FLASH_LITE),
+    "rubric_scaffold":EndpointConfig(Provider.MISTRAL, Model.MINISTRAL),
+    "rubric_verify":  EndpointConfig(Provider.MISTRAL, Model.MINISTRAL),
+    "chat":           EndpointConfig(Provider.MISTRAL, Model.MINISTRAL),
 }
 
 # API keys
