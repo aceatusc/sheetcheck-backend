@@ -183,7 +183,7 @@ STUB_ASK = {
     ],
 }
 
-STUB_EDIT = STUB_SEGMENTS[1:3]  # Return seg-2 + seg-3 as the edited chain stub
+STUB_EDIT = STUB_SEGMENTS[5:]  # Return seg-2 + seg-3 as the edited chain stub
 
 STUB_VERIFY = [
     {"id": "h1", "met": True,  "reasoning": "Row 1 contains Month, Revenue, Expenses, Profit, Growth % labels.", "references": ["A1:E1"]},
@@ -234,7 +234,7 @@ Respond with a single JSON object:
 
 Respond with ONLY the JSON object, no markdown, no extra text.
 """,
-
+# TODO: remaining_segments should be removed. Edit should come up with remaining segments itself
 "edit": """You are an Excel automation assistant. The user wants to modify a specific step in a multi-step spreadsheet automation.
 
 You will receive:
