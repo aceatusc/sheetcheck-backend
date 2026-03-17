@@ -105,21 +105,19 @@ def edit():
     body, err = _body();
     if err: return err
 
-    message            = body.get("message", "").strip()
-    context            = body.get("context", {})
-    original_segment   = body.get("segment", {})
-    remaining_segments = body.get("remaining_segments", [])
+    message          = body.get("message", "").strip()
+    context          = body.get("context", {})
+    original_segment = body.get("segment", {})
 
     if message.lower() == "test":
         return jsonify({"segments": STUB_EDIT})
 
     extra = {
-        "original_segment":   original_segment,
-        "remaining_segments": remaining_segments, # TODO: should be removed. Edit should come up with remaining segments itself
-        "user_feedback":      message,
+        "original_segment": original_segment,
+        "user_feedback":    message,
     }
     prompt = build_user_prompt(
-        message or "Apply user feedback to this segment and regenerate the remainder.",
+        message or "Apply user feedback to this segment and generate the complete remaining path.",
         context, extra
     )
     try:

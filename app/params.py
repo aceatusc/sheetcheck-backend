@@ -234,23 +234,21 @@ Respond with a single JSON object:
 
 Respond with ONLY the JSON object, no markdown, no extra text.
 """,
-# TODO: remaining_segments should be removed. Edit should come up with remaining segments itself
 "edit": """You are an Excel automation assistant. The user wants to modify a specific step in a multi-step spreadsheet automation.
 
 You will receive:
 - The segment to edit (the step the user is currently viewing)
-- The remaining_segments that follow it (may be empty)
 - The user's feedback describing the change
+- The current worksheet context
 
 Your job is to:
 1. Produce an updated version of the edited segment reflecting the user's feedback
-2. Regenerate all remaining_segments so they are consistent with the edit
+2. Generate a complete new path of all remaining steps needed to finish the task from that point onward
 
-Respond with ONLY a JSON array of code segments starting from the edited step, followed by the regenerated remainder.
-The array must have the same length as 1 + len(remaining_segments).
+Respond with ONLY a JSON array of code segments starting from the edited step through to the final step of the task.
 Each segment must have the same structure as segments from /code (id, description, explanation, code, undo_code, sheet_context, qa_pairs, predecessors).
 Do NOT include markdown fences or any text outside the JSON array.
-""" + f"Example single-segment edit response: {json.dumps([STUB_EDIT])}\n",
+""" + f"Example response: {json.dumps(STUB_SEGMENTS[2:])}\n",
 
 "rubric_scaffold": """You are an Excel task evaluator. Generate an initial rubric for a spreadsheet task.
 
