@@ -82,7 +82,7 @@ STUB_SEGMENTS = [
         "qa_pairs": [
             {"q":"Why dark background?","a":"High contrast between header and data rows helps users quickly identify column names."},
         ],
-        "undo_code": 'await Excel.run(async (ctx) => { const h = ctx.workbook.worksheets.getActiveWorksheet().getRange("A1:E1"); h.format.fill.color=""; h.format.font.color=""; h.format.font.bold=false; await ctx.sync(); });',
+        "undo_code": 'await Excel.run(async (ctx) => { const h = ctx.workbook.worksheets.getActiveWorksheet().getRange("A1:E1"); h.format.fill.clear(); h.format.font.color=null; h.format.font.bold=false; h.format.font.size=11; h.format.horizontalAlignment="General"; await ctx.sync(); });',
         "code": 'await Excel.run(async (ctx) => { const sheet=ctx.workbook.worksheets.getActiveWorksheet(); const header=sheet.getRange("A1:E1"); header.format.fill.color="#1a1d27"; header.format.font.color="#4f8ef7"; header.format.font.bold=true; header.format.font.size=11; header.format.horizontalAlignment="Center"; await ctx.sync(); });',
     },
     {
@@ -131,7 +131,7 @@ STUB_SEGMENTS = [
         "qa_pairs": [
             {"q":"Why alternating colors?","a":"Zebra striping reduces eye tracking errors when reading across wide rows."},
         ],
-        "undo_code": 'await Excel.run(async (ctx) => { ctx.workbook.worksheets.getActiveWorksheet().getRange("A2:E7").format.fill.color=""; await ctx.sync(); });',
+        "undo_code": 'await Excel.run(async (ctx) => { ctx.workbook.worksheets.getActiveWorksheet().getRange("A2:E7").format.fill.clear(); await ctx.sync(); });',
         "code": 'await Excel.run(async (ctx) => { const sheet=ctx.workbook.worksheets.getActiveWorksheet(); for(let i=2;i<=7;i++){sheet.getRange("A"+i+":E"+i).format.fill.color=i%2===0?"#f5f7ff":"#ffffff";} await ctx.sync(); });',
     },
     {
@@ -143,7 +143,7 @@ STUB_SEGMENTS = [
         "qa_pairs": [
             {"q":"Why bold for high values?","a":"Double encoding (color + weight) helps users with color vision deficiency."},
         ],
-        "undo_code": 'await Excel.run(async (ctx) => { const r=ctx.workbook.worksheets.getActiveWorksheet().getRange("D2:D7"); r.format.font.color=""; r.format.font.bold=false; await ctx.sync(); });',
+        "undo_code": 'await Excel.run(async (ctx) => { const r=ctx.workbook.worksheets.getActiveWorksheet().getRange("D2:D7"); r.format.font.color=null; r.format.font.bold=false; await ctx.sync(); });',
         "code": 'await Excel.run(async (ctx) => { const sheet=ctx.workbook.worksheets.getActiveWorksheet(); const profit=sheet.getRange("D2:D7"); profit.load("values"); await ctx.sync(); profit.values.forEach((row,i)=>{const cell=sheet.getRange("D"+(i+2)); cell.format.font.color=row[0]>=60000?"#1a7a4a":"#b94040"; cell.format.font.bold=row[0]>=60000;}); await ctx.sync(); });',
     },
     {
@@ -234,21 +234,23 @@ Respond with a single JSON object:
 
 Respond with ONLY the JSON object, no markdown, no extra text.
 """,
+# TODO: remaining_segments should be removed. Edit should come up with remaining segments itself
 "edit": """You are an Excel automation assistant. The user wants to modify a specific step in a multi-step spreadsheet automation.
 
 You will receive:
 - The segment to edit (the step the user is currently viewing)
+- The remaining_segments that follow it (may be empty)
 - The user's feedback describing the change
-- The current worksheet context
 
 Your job is to:
 1. Produce an updated version of the edited segment reflecting the user's feedback
-2. Generate a complete new path of all remaining steps needed to finish the task from that point onward
+2. Regenerate all remaining_segments so they are consistent with the edit
 
-Respond with ONLY a JSON array of code segments starting from the edited step through to the final step of the task.
+Respond with ONLY a JSON array of code segments starting from the edited step, followed by the regenerated remainder.
+The array must have the same length as 1 + len(remaining_segments).
 Each segment must have the same structure as segments from /code (id, description, explanation, code, undo_code, sheet_context, qa_pairs, predecessors).
 Do NOT include markdown fences or any text outside the JSON array.
-""" + f"Example response: {json.dumps(STUB_SEGMENTS[2:])}\n",
+""" + f"Example single-segment edit response: {json.dumps([STUB_EDIT])}\n",
 
 "rubric_scaffold": """You are an Excel task evaluator. Generate an initial rubric for a spreadsheet task.
 
