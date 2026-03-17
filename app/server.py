@@ -115,7 +115,7 @@ def edit():
 
     extra = {
         "original_segment":   original_segment,
-        "remaining_segments": remaining_segments,
+        "remaining_segments": remaining_segments, # TODO: should be removed. Edit should come up with remaining segments itself
         "user_feedback":      message,
     }
     prompt = build_user_prompt(
