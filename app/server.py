@@ -57,8 +57,7 @@ def code():
     if message.lower() == "test":
         return jsonify({"segments": STUB_SEGMENTS})
 
-    extra = {"rubric": rubric} if rubric else None
-    prompt = build_user_prompt(message, context, extra)
+    prompt = build_user_prompt(message, context)
     try:
         raw = call_llm("code", prompt)
         segments = parse_segments(raw)
@@ -115,11 +114,11 @@ def edit():
 
     extra = {
         "original_segment":   original_segment,
-        "remaining_segments": remaining_segments, # TODO: should be removed. Edit should come up with remaining segments itself
+        "remaining_segments": remaining_segments,
         "user_feedback":      message,
     }
     prompt = build_user_prompt(
-        message or "Apply user feedback to this segment and regenerate the remainder.",
+        message or "Apply user feedback to this segment and update the remainder.",
         context, extra
     )
     try:

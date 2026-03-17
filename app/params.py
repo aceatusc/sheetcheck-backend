@@ -224,7 +224,7 @@ Respond with a single JSON object:
 
 Respond with ONLY the JSON object, no markdown, no extra text.
 """,
-"edit": """You are an Excel automation assistant. The user wants to modify a specific step in a multi-step spreadsheet automation.
+"edit": """You are an Excel automation assistant. The user wants to modify a step in a multi-step spreadsheet automation.
 
 You will receive:
 - The segment to edit (the step the user is currently viewing)
