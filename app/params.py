@@ -207,7 +207,7 @@ Each segment shape:
 Rules:
 - predecessors: list ids of segments this one depends on semantically (can be empty [])
 - qa_pairs: 2-3 Q&A pairs explaining design choices for this step
-Worksheet context and optional rubric are provided below.
+Worksheet context are provided below.
 """ + f"Example: {json.dumps(STUB_SEGMENTS)}\n",
 
 "ask": """You are an Excel assistant answering a follow-up question about a specific step in a spreadsheet automation plan.
