@@ -220,7 +220,7 @@ STUB_SALES = [
             {"label":"Summary background","key":"#1a2744","value":"#1a2744","type":"color"},
             {"label":"Summary font","key":"#f5c842","value":"#f5c842","type":"color"},
         ],
-        "code": 'await Excel.run(async (ctx) => { const s=ctx.workbook.worksheets.getActiveWorksheet(); s.getRange("A10").values=[["SUMMARY"]]; s.getRange("A10:F10").format.fill.color="#1a2744"; s.getRange("A10:F10").format.font.color="#f5c842"; s.getRange("A10:F10").format.font.bold=true; s.getRange("A11:B11").values=[["Total Income","=SUM(C2:C8)"]]; s.getRange("A12:B12").values=[["Total Tax Owed","=SUM(E2:E8)"]]; s.getRange("A13:B13").values=[["Effective Rate","=B12/B11"]]; s.getRange("B11:B12").numberFormat="$#,##0.00"; s.getRange("B13").numberFormat="0.00%"; s.getRange("A11:B13").format.font.bold=true; s.getRange("A1:F13").getEntireColumn().format.autofitColumns(); await ctx.sync(); });',
+        "code": 'await Excel.run(async (ctx) => { const s=ctx.workbook.worksheets.getActiveWorksheet(); s.getRange("H3").values=[["SUMMARY"]]; s.getRange("H3:I3").format.fill.color="#1a2744"; s.getRange("H3:I3").format.font.color="#f5c842"; s.getRange("H3:I3").format.font.bold=true; s.getRange("H4:I4").values=[["Total Income","=SUM(C2:C8)"]]; s.getRange("H5:I5").values=[["Total Tax Owed","=SUM(E2:E8)"]]; s.getRange("H6:I6").values=[["Effective Rate","=I5/I4"]]; s.getRange("I4:I5").numberFormat="$#,##0.00"; s.getRange("I6").numberFormat="0.00%"; s.getRange("H3:I6").format.font.bold=true; s.getRange("A1:I8").getEntireColumn().format.autofitColumns(); await ctx.sync(); });',
     },
 ]
 
