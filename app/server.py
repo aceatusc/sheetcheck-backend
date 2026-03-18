@@ -13,7 +13,8 @@ Routes:
 from flask import Flask, Blueprint, jsonify, request
 from flask_cors import CORS
 
-from params import SHARED_SECRET, STUB_SEGMENTS, STUB_RUBRIC, STUB_ASK, STUB_EDIT, STUB_VERIFY
+from params import SHARED_SECRET, STUB_RUBRIC, STUB_ASK, STUB_EDIT, STUB_VERIFY
+from stubs import STUBS, STUB_META, STUB_RUBRICS, STUB_VERIFIES
 from utils import build_user_prompt, call_llm, parse_segments, parse_json
 
 app   = Flask(__name__)
@@ -54,10 +55,16 @@ def code():
     if not message:
         return jsonify({"error":"message is required"}), 400
 
-    if message.lower() == "test":
-        return jsonify({"segments": STUB_SEGMENTS})
+    # stub:KEY triggers a canned demo without hitting the LLM
+    if message.lower().startswith("stub:"):
+        key = message[5:].strip().lower()
+        segs = STUBS.get(key)
+        if segs:
+            return jsonify({"segments": segs})
+        return jsonify({"error": f"Unknown stub '{key}'. Valid: {list(STUBS.keys())}"}), 400
 
-    prompt = build_user_prompt(message, context)
+    extra = {"rubric": rubric} if rubric else None
+    prompt = build_user_prompt(message, context, extra)
     try:
         raw = call_llm("code", prompt)
         segments = parse_segments(raw)
@@ -141,8 +148,11 @@ def rubric_scaffold():
     message = body.get("message","").strip()
     context = body.get("context", {})
 
-    if not message or message.lower() == "test":
+    if not message:
         return jsonify(STUB_RUBRIC)
+    if message.lower().startswith("stub:"):
+        key = message[5:].strip().lower()
+        return jsonify(STUB_RUBRICS.get(key, STUB_RUBRIC))
 
     prompt = build_user_prompt(message, context)
     try:
@@ -165,7 +175,11 @@ def rubric_verify():
     rubric  = body.get("rubric", {})
     context = body.get("context", {})
 
-    # Stub: if the rubric matches the default stub structure, return stub results
+    # Route to stub verify if rubric carries a stub_key
+    stub_key = rubric.get("stub_key", "")
+    if stub_key and stub_key in STUB_VERIFIES:
+        return jsonify({"results": STUB_VERIFIES[stub_key]})
+    # Fallback stub if no sheet data provided
     if not context.get("sheetData"):
         return jsonify({"results": STUB_VERIFY})
 
