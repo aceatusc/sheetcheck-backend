@@ -82,5 +82,7 @@ def parse_segments(raw_text: str) -> list:
         seg.setdefault("affordances", [])
         seg.setdefault("alternatives", [])
         seg.setdefault("qa_pairs", [])
+        seg.setdefault("edit_suggestions", [])
+        seg.setdefault("parameters", [])
         seg.setdefault("undo_code", "")
     return segments
