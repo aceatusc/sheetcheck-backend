@@ -327,15 +327,11 @@ STUB_RUBRICS = {
     "sales": {
         "stub_key": "sales",
         "hard_requirements": [
-            {"id":"h1","label":"Headers include Category, Description, Gross Amount, Tax Rate, Tax Owed, Status","checked":False},
-            {"id":"h2","label":"Tax Owed column uses ROUND(Amount × Rate, 2) formulas","checked":False},
-            {"id":"h3","label":"All seven income rows populated with correct categories","checked":False},
+            {"id":"h1","label":"Headers include at least Category, Description, Gross Amount, Tax Rate, Tax Owed, Status","checked":False},
         ],
         "soft_requirements": [
             {"id":"s1","label":"Tax brackets visually colour-coded by rate","checked":False},
             {"id":"s2","label":"Status column distinguishes Withheld vs Owed rows","checked":False},
-            {"id":"s3","label":"Summary section shows Total Income, Total Tax, Effective Rate","checked":False},
-            {"id":"s4","label":"Column widths auto-fitted for readability","checked":False},
         ],
     },
     "inventory": {
