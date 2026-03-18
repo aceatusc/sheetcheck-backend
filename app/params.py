@@ -70,6 +70,8 @@ STUB_SEGMENTS = [
             {"q":"Why 5 columns?","a":"Revenue, Expenses, and Profit together give a complete P&L picture; Growth % adds a trend indicator."},
             {"q":"Why start in A1?","a":"Starting at the top-left keeps the table anchored and makes formulas simpler."},
         ],
+        "edit_suggestions": ["Add more columns like Net Margin", "Rename Growth % to MoM Growth", "Start table at a different cell"],
+        "parameters":    [],
         "code": 'await Excel.run(async (ctx) => { const sheet = ctx.workbook.worksheets.getActiveWorksheet(); sheet.getRange("A1:E1").values = [["Month","Revenue","Expenses","Profit","Growth %"]]; await ctx.sync(); });',
     },
     {
@@ -81,6 +83,12 @@ STUB_SEGMENTS = [
         "qa_pairs": [
             {"q":"Why dark background?","a":"High contrast between header and data rows helps users quickly identify column names."},
         ],
+        "edit_suggestions": ["Use a lighter header background", "Change the font color", "Increase the font size"],
+        "parameters": [
+            {"label": "Background color", "key": "#1a1d27", "value": "#1a1d27", "type": "text"},
+            {"label": "Font color",       "key": "#4f8ef7", "value": "#4f8ef7", "type": "text"},
+            {"label": "Font size",        "key": "11",      "value": 11,        "type": "number"},
+        ],
         "code": 'await Excel.run(async (ctx) => { const sheet=ctx.workbook.worksheets.getActiveWorksheet(); const header=sheet.getRange("A1:E1"); header.format.fill.color="#1a1d27"; header.format.font.color="#4f8ef7"; header.format.font.bold=true; header.format.font.size=11; header.format.horizontalAlignment="Center"; await ctx.sync(); });',
     },
     {
@@ -91,6 +99,11 @@ STUB_SEGMENTS = [
         "predecessors":  ["seg-1"],
         "qa_pairs": [
             {"q":"Why leave column E blank?","a":"Growth % requires the previous month's value to exist first; we add those formulas in the dedicated next step."},
+        ],
+        "edit_suggestions": ["Extend to 12 months", "Change the starting revenue values", "Add a different starting month"],
+        "parameters": [
+            {"label": "Jan Revenue",  "key": "142000", "value": 142000, "type": "number"},
+            {"label": "Jan Expenses", "key": "98000",  "value": 98000,  "type": "number"},
         ],
         "code": 'await Excel.run(async (ctx) => { const sheet=ctx.workbook.worksheets.getActiveWorksheet(); sheet.getRange("A2:E7").values=[["Jan",142000,98000,44000,""],["Feb",158000,104000,54000,""],["Mar",175000,110000,65000,""],["Apr",163000,107000,56000,""],["May",191000,115000,76000,""],["Jun",210000,121000,89000,""]]; await ctx.sync(); });',
     },
@@ -104,6 +117,10 @@ STUB_SEGMENTS = [
             {"q":"Why skip E2?","a":"January has no prior month, so the growth formula would divide by zero; IFERROR handles it but leaving E2 blank is cleaner."},
             {"q":"Why IFERROR?","a":"Protects against division-by-zero if any profit value is 0."},
         ],
+        "edit_suggestions": ["Show growth as Revenue % instead of Profit %", "Format as integer % instead of 1 decimal", "Include E2 with an N/A label"],
+        "parameters": [
+            {"label": "Number format", "key": "0.0%", "value": "0.0%", "type": "text"},
+        ],
         "code": "await Excel.run(async (ctx) => { const sheet=ctx.workbook.worksheets.getActiveWorksheet(); sheet.getRange('E3:E7').formulas=[['=IFERROR((D3-D2)/D2,\"\")'],['=IFERROR((D4-D3)/D3,\"\")'],['=IFERROR((D5-D4)/D4,\"\")'],['=IFERROR((D6-D5)/D5,\"\")'],['=IFERROR((D7-D6)/D6,\"\")']];\nsheet.getRange('E3:E7').numberFormat=[['0.0%'],['0.0%'],['0.0%'],['0.0%'],['0.0%']]; await ctx.sync(); });",
     },
     {
@@ -115,6 +132,10 @@ STUB_SEGMENTS = [
         "qa_pairs": [
             {"q":"Why $#,##0 over $#,##0.00?","a":"Financial summaries typically round to whole dollars for readability; individual transactions warrant cents."},
         ],
+        "edit_suggestions": ["Show cents with $#,##0.00", "Use €#,##0 for Euros", "Remove the currency symbol"],
+        "parameters": [
+            {"label": "Currency format", "key": "$#,##0", "value": "$#,##0", "type": "text"},
+        ],
         "code": 'await Excel.run(async (ctx) => { const sheet=ctx.workbook.worksheets.getActiveWorksheet(); sheet.getRange("B2:D7").numberFormat=[["$#,##0","$#,##0","$#,##0"],["$#,##0","$#,##0","$#,##0"],["$#,##0","$#,##0","$#,##0"],["$#,##0","$#,##0","$#,##0"],["$#,##0","$#,##0","$#,##0"],["$#,##0","$#,##0","$#,##0"]]; await ctx.sync(); });',
     },
     {
@@ -125,6 +146,11 @@ STUB_SEGMENTS = [
         "predecessors":  ["seg-3"],
         "qa_pairs": [
             {"q":"Why alternating colors?","a":"Zebra striping reduces eye tracking errors when reading across wide rows."},
+        ],
+        "edit_suggestions": ["Use a stronger stripe color", "Apply stripes to the header too", "Use a warm color palette instead"],
+        "parameters": [
+            {"label": "Even row color", "key": "#f5f7ff", "value": "#f5f7ff", "type": "text"},
+            {"label": "Odd row color",  "key": "#ffffff", "value": "#ffffff", "type": "text"},
         ],
         "code": 'await Excel.run(async (ctx) => { const sheet=ctx.workbook.worksheets.getActiveWorksheet(); for(let i=2;i<=7;i++){sheet.getRange("A"+i+":E"+i).format.fill.color=i%2===0?"#f5f7ff":"#ffffff";} await ctx.sync(); });',
     },
@@ -150,6 +176,12 @@ STUB_SEGMENTS = [
         "qa_pairs": [
             {"q":"Why autofitColumns last?","a":"All data must exist before fitting, otherwise columns are sized to empty cells."},
             {"q":"Why SUM not SUBTOTAL?","a":"SUBTOTAL respects filters, but for a simple 6-row table SUM is clearer and more expected."},
+        ],
+        "edit_suggestions": ["Change TOTAL label to GRAND TOTAL", "Use a different totals row color", "Add an average row below totals"],
+        "parameters": [
+            {"label": "Row label",        "key": "TOTAL",   "value": "TOTAL",   "type": "text"},
+            {"label": "Background color", "key": "#1a1d27", "value": "#1a1d27", "type": "text"},
+            {"label": "Font color",       "key": "#ffffff", "value": "#ffffff", "type": "text"},
         ],
         "code": 'await Excel.run(async (ctx) => { const sheet=ctx.workbook.worksheets.getActiveWorksheet(); sheet.getRange("A8").values=[["TOTAL"]]; sheet.getRange("B8:D8").formulas=[["=SUM(B2:B7)","=SUM(C2:C7)","=SUM(D2:D7)"]]; sheet.getRange("B8:D8").numberFormat=[["$#,##0","$#,##0","$#,##0"]]; const t=sheet.getRange("A8:E8"); t.format.fill.color="#1a1d27"; t.format.font.color="#ffffff"; t.format.font.bold=true; sheet.getRange("A1:E8").getEntireColumn().format.autofitColumns(); await ctx.sync(); });',
     },
