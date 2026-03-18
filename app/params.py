@@ -85,8 +85,8 @@ STUB_SEGMENTS = [
         ],
         "edit_suggestions": ["Use a lighter header background", "Change the font color", "Increase the font size"],
         "parameters": [
-            {"label": "Background color", "key": "#1a1d27", "value": "#1a1d27", "type": "text"},
-            {"label": "Font color",       "key": "#4f8ef7", "value": "#4f8ef7", "type": "text"},
+            {"label": "Background color", "key": "#1a1d27", "value": "#1a1d27", "type": "color"},
+            {"label": "Font color",       "key": "#4f8ef7", "value": "#4f8ef7", "type": "color"},
             {"label": "Font size",        "key": "11",      "value": 11,        "type": "number"},
         ],
         "code": 'await Excel.run(async (ctx) => { const sheet=ctx.workbook.worksheets.getActiveWorksheet(); const header=sheet.getRange("A1:E1"); header.format.fill.color="#1a1d27"; header.format.font.color="#4f8ef7"; header.format.font.bold=true; header.format.font.size=11; header.format.horizontalAlignment="Center"; await ctx.sync(); });',
@@ -134,7 +134,7 @@ STUB_SEGMENTS = [
         ],
         "edit_suggestions": ["Show cents with $#,##0.00", "Use €#,##0 for Euros", "Remove the currency symbol"],
         "parameters": [
-            {"label": "Currency format", "key": "$#,##0", "value": "$#,##0", "type": "text"},
+            {"label": "Currency format", "key": "$#,##0", "value": "$#,##0", "type": "select", "options": ["$#,##0", "$#,##0.00", "€#,##0", "£#,##0", "#,##0"]},
         ],
         "code": 'await Excel.run(async (ctx) => { const sheet=ctx.workbook.worksheets.getActiveWorksheet(); sheet.getRange("B2:D7").numberFormat=[["$#,##0","$#,##0","$#,##0"],["$#,##0","$#,##0","$#,##0"],["$#,##0","$#,##0","$#,##0"],["$#,##0","$#,##0","$#,##0"],["$#,##0","$#,##0","$#,##0"],["$#,##0","$#,##0","$#,##0"]]; await ctx.sync(); });',
     },
@@ -149,8 +149,8 @@ STUB_SEGMENTS = [
         ],
         "edit_suggestions": ["Use a stronger stripe color", "Apply stripes to the header too", "Use a warm color palette instead"],
         "parameters": [
-            {"label": "Even row color", "key": "#f5f7ff", "value": "#f5f7ff", "type": "text"},
-            {"label": "Odd row color",  "key": "#ffffff", "value": "#ffffff", "type": "text"},
+            {"label": "Even row color", "key": "#f5f7ff", "value": "#f5f7ff", "type": "color"},
+            {"label": "Odd row color",  "key": "#ffffff", "value": "#ffffff", "type": "color"},
         ],
         "code": 'await Excel.run(async (ctx) => { const sheet=ctx.workbook.worksheets.getActiveWorksheet(); for(let i=2;i<=7;i++){sheet.getRange("A"+i+":E"+i).format.fill.color=i%2===0?"#f5f7ff":"#ffffff";} await ctx.sync(); });',
     },
@@ -164,7 +164,7 @@ STUB_SEGMENTS = [
             {"q":"Why bold for high values?","a":"Double encoding (color + weight) helps users with color vision deficiency."},
         ],
         "edit_suggestions": ["Change the profit threshold", "Use different colors", "Apply to a wider range"],
-        "parameters":    [{"label": "Profit threshold", "key": "threshold", "value": 60000, "type": "number"}, {"label": "High color", "key": "highColor", "value": "#1a7a4a", "type": "text"}, {"label": "Low color", "key": "lowColor", "value": "#b94040", "type": "text"}],
+        "parameters":    [{"label": "Profit threshold", "key": "threshold", "value": 60000, "type": "number"}, {"label": "High color", "key": "highColor", "value": "#1a7a4a", "type": "color"}, {"label": "Low color", "key": "lowColor", "value": "#b94040", "type": "color"}],
         "code": 'await Excel.run(async (ctx) => { const sheet=ctx.workbook.worksheets.getActiveWorksheet(); const profit=sheet.getRange("D2:D7"); profit.load("values"); await ctx.sync(); profit.values.forEach((row,i)=>{const cell=sheet.getRange("D"+(i+2)); cell.format.font.color=row[0]>=60000?"#1a7a4a":"#b94040"; cell.format.font.bold=row[0]>=60000;}); await ctx.sync(); });',
     },
     {
@@ -179,9 +179,9 @@ STUB_SEGMENTS = [
         ],
         "edit_suggestions": ["Change TOTAL label to GRAND TOTAL", "Use a different totals row color", "Add an average row below totals"],
         "parameters": [
-            {"label": "Row label",        "key": "TOTAL",   "value": "TOTAL",   "type": "text"},
-            {"label": "Background color", "key": "#1a1d27", "value": "#1a1d27", "type": "text"},
-            {"label": "Font color",       "key": "#ffffff", "value": "#ffffff", "type": "text"},
+            {"label": "Row label",        "key": "TOTAL",   "value": "TOTAL",   "type": "select", "options": ["TOTAL", "GRAND TOTAL", "SUM", "NET"]},
+            {"label": "Background color", "key": "#1a1d27", "value": "#1a1d27", "type": "color"},
+            {"label": "Font color",       "key": "#ffffff", "value": "#ffffff", "type": "color"},
         ],
         "code": 'await Excel.run(async (ctx) => { const sheet=ctx.workbook.worksheets.getActiveWorksheet(); sheet.getRange("A8").values=[["TOTAL"]]; sheet.getRange("B8:D8").formulas=[["=SUM(B2:B7)","=SUM(C2:C7)","=SUM(D2:D7)"]]; sheet.getRange("B8:D8").numberFormat=[["$#,##0","$#,##0","$#,##0"]]; const t=sheet.getRange("A8:E8"); t.format.fill.color="#1a1d27"; t.format.font.color="#ffffff"; t.format.font.bold=true; sheet.getRange("A1:E8").getEntireColumn().format.autofitColumns(); await ctx.sync(); });',
     },
@@ -244,7 +244,7 @@ Rules:
 - predecessors: list ids of segments this one depends on semantically (can be empty [])
 - qa_pairs: 2-3 Q&A pairs explaining design choices for this step
 - edit_suggestions: 2-3 short prompts suggesting edits the user might want (e.g. "Change threshold to 50000", "Use red/green instead")
-- parameters: ANY numeric/string constant hardcoded in the code that a user might want to tweak (thresholds, colors, counts, ranges). Each must have a unique key matching a variable or literal in the code, a human-readable label, its current value, and type ("number" or "text"). Empty array [] if no meaningful parameters exist.
+- parameters: ANY numeric/string constant hardcoded in the code that a user might want to tweak (thresholds, colors, counts, ranges). Each must have a unique key matching a variable or literal in the code, a human-readable label, its current value, and type. Types: "number" (numeric input), "color" (color picker, value must be a hex string like "#ff0000"), "select" (dropdown — also include an "options" array of string choices), "text" (plain text). Empty array [] if no meaningful parameters exist.
 Worksheet context and optional are provided below.
 """ + f"Example: {json.dumps(STUB_SEGMENTS)}\n",
 
