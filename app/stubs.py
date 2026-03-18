@@ -109,68 +109,118 @@ STUB_PNL = [
     },
 ]
 
-# ── Demo 2: Sales Tracker ─────────────────────────────────────────────────
+# ── Demo 2: Tax Filing Summary ────────────────────────────────────────────
+# Designed to showcase every SheetCheck feature:
+#   Parameters: number (threshold), select (tax bracket), color (status colors)
+#   Edit + branching: change tax rate mid-chain → new branch in graph
+#   Ask panel: explain ROUND() formula choice
+#   Step-back: undo to before tax formulas and try a different rate
+#   Rubric gate: meaningful hard/soft requirements for a tax summary
 
 STUB_SALES = [
     {
-        "id": "seg-1", "description": "Write sales tracker headers",
+        "id": "seg-1", "description": "Write tax summary headers",
         "sheet_context": ["A1:F1"], "predecessors": [],
-        "explanation": "Creates headers: Rep, Region, Q1, Q2, Q3, Q4.",
-        "qa_pairs": [{"q":"Why quarterly?","a":"Quarterly view balances granularity with readability for sales tracking."}],
-        "edit_suggestions": ["Add a Total column","Split into monthly columns","Add a Target column"],
+        "explanation": "Creates six column headers: Category, Description, Gross Amount, Tax Rate, Tax Owed, Status.",
+        "qa_pairs": [
+            {"q":"Why include both Category and Description?","a":"Category groups income types for the summary; Description holds the specific source name."},
+            {"q":"Why a Status column?","a":"Quickly shows whether tax has been withheld, is still owed, or generates a refund."},
+        ],
+        "edit_suggestions": ["Add a Deductions column","Add a Notes column","Split Tax Owed into Federal and State"],
         "parameters": [],
-        "code": 'await Excel.run(async (ctx) => { const s=ctx.workbook.worksheets.getActiveWorksheet(); s.getRange("A1:F1").values=[["Rep","Region","Q1","Q2","Q3","Q4"]]; await ctx.sync(); });',
+        "code": 'await Excel.run(async (ctx) => { const s=ctx.workbook.worksheets.getActiveWorksheet(); s.getRange("A1:F1").values=[["Category","Description","Gross Amount","Tax Rate","Tax Owed","Status"]]; await ctx.sync(); });',
     },
     {
         "id": "seg-2", "description": "Style header row",
         "sheet_context": ["A1:F1"], "predecessors": ["seg-1"],
-        "explanation": "Dark teal header with white bold text.",
-        "qa_pairs": [{"q":"Why teal?","a":"Distinguishes sales dashboards from financial ones at a glance."}],
-        "edit_suggestions": ["Use a blue header instead","Make the header lighter","Change font size"],
-        "parameters": [
-            {"label":"Background color","key":"#0d4f4f","value":"#0d4f4f","type":"color"},
-            {"label":"Font color","key":"#e0ffff","value":"#e0ffff","type":"color"},
+        "explanation": "Applies a dark navy background with gold bold text — a professional government-form aesthetic.",
+        "qa_pairs": [
+            {"q":"Why navy and gold?","a":"These colours evoke official tax document styling and distinguish this from typical financial dashboards."},
         ],
-        "code": 'await Excel.run(async (ctx) => { const s=ctx.workbook.worksheets.getActiveWorksheet(); const h=s.getRange("A1:F1"); h.format.fill.color="#0d4f4f"; h.format.font.color="#e0ffff"; h.format.font.bold=true; h.format.horizontalAlignment="Center"; await ctx.sync(); });',
-    },
-    {
-        "id": "seg-3", "description": "Fill in sales rep data",
-        "sheet_context": ["A2:F7"], "predecessors": ["seg-1"],
-        "explanation": "Populates 6 reps across 3 regions with quarterly sales figures.",
-        "qa_pairs": [{"q":"Why 6 reps?","a":"A common small team size; easy to extend by adding rows."}],
-        "edit_suggestions": ["Add more reps","Change the regions","Use higher sales values"],
-        "parameters": [],
-        "code": 'await Excel.run(async (ctx) => { const s=ctx.workbook.worksheets.getActiveWorksheet(); s.getRange("A2:F7").values=[["Alice","North",82000,91000,87000,95000],["Bob","North",74000,78000,82000,88000],["Carol","South",65000,70000,68000,73000],["Dan","South",59000,63000,71000,76000],["Eve","West",90000,96000,102000,110000],["Frank","West",55000,60000,58000,64000]]; await ctx.sync(); });',
-    },
-    {
-        "id": "seg-4", "description": "Add Total and Average columns",
-        "sheet_context": ["G1:H7"], "predecessors": ["seg-3"],
-        "explanation": "Inserts Total (SUM) and Average (AVERAGE) formula columns for each rep.",
-        "qa_pairs": [{"q":"Why both total and average?","a":"Total shows output; average smooths out seasonal spikes."}],
-        "edit_suggestions": ["Add a rank column","Show only total","Format as currency"],
-        "parameters": [],
-        "code": 'await Excel.run(async (ctx) => { const s=ctx.workbook.worksheets.getActiveWorksheet(); s.getRange("G1").values=[["Total"]]; s.getRange("H1").values=[["Avg/Q"]]; for(let i=2;i<=7;i++){s.getRange("G"+i).formulas=[["=SUM(C"+i+":F"+i+")"]]; s.getRange("H"+i).formulas=[["=AVERAGE(C"+i+":F"+i+")"]];} await ctx.sync(); });',
-    },
-    {
-        "id": "seg-5", "description": "Format numbers and highlight top performer",
-        "sheet_context": ["C2:H7"], "predecessors": ["seg-3","seg-4"],
-        "explanation": "Formats sales as currency, then bold-greens the rep with the highest total.",
-        "qa_pairs": [{"q":"Why highlight top performer?","a":"Instant visual recognition of the leader motivates the team."}],
-        "edit_suggestions": ["Highlight top 3 instead","Use a different highlight color","Add conditional formatting for quota"],
+        "edit_suggestions": ["Use a darker background","Switch to a grey professional look","Use IRS blue (#003087)"],
         "parameters": [
-            {"label":"Top performer color","key":"#1a7a4a","value":"#1a7a4a","type":"color"},
-            {"label":"Number format","key":"$#,##0","value":"$#,##0","type":"select","options":["$#,##0","$#,##0.00","#,##0"]},
+            {"label":"Background color","key":"#1a2744","value":"#1a2744","type":"color"},
+            {"label":"Font color","key":"#f5c842","value":"#f5c842","type":"color"},
+            {"label":"Font size","key":"11","value":11,"type":"number"},
         ],
-        "code": 'await Excel.run(async (ctx) => { const s=ctx.workbook.worksheets.getActiveWorksheet(); s.getRange("C2:H7").numberFormat="$#,##0"; const g=s.getRange("G2:G7"); g.load("values"); await ctx.sync(); let maxV=0,maxR=2; g.values.forEach((r,i)=>{if(r[0]>maxV){maxV=r[0];maxR=i+2;}}); const tr=s.getRange("A"+maxR+":H"+maxR); tr.format.font.color="#1a7a4a"; tr.format.font.bold=true; await ctx.sync(); });',
+        "code": 'await Excel.run(async (ctx) => { const s=ctx.workbook.worksheets.getActiveWorksheet(); const h=s.getRange("A1:F1"); h.format.fill.color="#1a2744"; h.format.font.color="#f5c842"; h.format.font.bold=true; h.format.font.size=11; h.format.horizontalAlignment="Center"; await ctx.sync(); });',
     },
     {
-        "id": "seg-6", "description": "Auto-fit and freeze header",
-        "sheet_context": ["A1:H7"], "predecessors": ["seg-4"],
-        "explanation": "Auto-fits all columns and freezes row 1 so headers stay visible when scrolling.",
-        "qa_pairs": [{"q":"Why freeze?","a":"With 8 columns the header easily scrolls out of view."}],
-        "edit_suggestions": ["Also freeze column A","Skip freezing","Add a filter to the header"],
-        "parameters": [],
-        "code": 'await Excel.run(async (ctx) => { const s=ctx.workbook.worksheets.getActiveWorksheet(); s.getRange("A1:H7").getEntireColumn().format.autofitColumns(); s.freezePanes.freezeRows(1); await ctx.sync(); });',
+        "id": "seg-3", "description": "Fill in income sources",
+        "sheet_context": ["A2:D8"], "predecessors": ["seg-1"],
+        "explanation": "Populates seven income rows across four categories: Employment, Freelance, Investment, and Rental.",
+        "qa_pairs": [
+            {"q":"Why seven rows?","a":"Covers the most common individual income types without overwhelming the template."},
+            {"q":"Why leave Tax Owed blank?","a":"Tax Owed is calculated by formula in the next step once rates are confirmed."},
+        ],
+        "edit_suggestions": ["Add a retirement income row","Change the income amounts","Add a business income category"],
+        "parameters": [
+            {"label":"Primary salary","key":"95000","value":95000,"type":"number"},
+            {"label":"Freelance income","key":"28000","value":28000,"type":"number"},
+        ],
+        "code": 'await Excel.run(async (ctx) => { const s=ctx.workbook.worksheets.getActiveWorksheet(); s.getRange("A2:D8").values=[["Employment","W-2 Salary",95000,0.22],["Employment","Bonus",18000,0.22],["Freelance","Consulting",28000,0.24],["Freelance","Design work",9500,0.24],["Investment","Dividends",4200,0.15],["Investment","Capital Gains",11000,0.15],["Rental","Property rent",24000,0.22]]; await ctx.sync(); });',
+    },
+    {
+        "id": "seg-4", "description": "Apply tax rate formatting",
+        "sheet_context": ["D2:D8"], "predecessors": ["seg-3"],
+        "explanation": "Formats column D as percentage and highlights each bracket with a subtle background so the three rates stand out.",
+        "qa_pairs": [
+            {"q":"Why colour-code the brackets?","a":"At a glance the user can see which rows share the same rate — important when verifying entries."},
+            {"q":"Why 22%, 24%, 15%?","a":"These map to the most common 2024 federal brackets for middle-income filers."},
+        ],
+        "edit_suggestions": ["Change the 24% bracket to 32%","Add a 37% top bracket row","Make the bracket colors more distinct"],
+        "parameters": [
+            {"label":"Standard bracket (22%)","key":"#eef4ff","value":"#eef4ff","type":"color"},
+            {"label":"High bracket (24%)","key":"#fff8e6","value":"#fff8e6","type":"color"},
+            {"label":"Capital gains bracket (15%)","key":"#eefff4","value":"#eefff4","type":"color"},
+        ],
+        "code": 'await Excel.run(async (ctx) => { const s=ctx.workbook.worksheets.getActiveWorksheet(); s.getRange("D2:D8").numberFormat="0%"; s.getRange("A2:F3").format.fill.color="#eef4ff"; s.getRange("A4:F5").format.fill.color="#fff8e6"; s.getRange("A6:F7").format.fill.color="#eefff4"; s.getRange("A8:F8").format.fill.color="#eef4ff"; await ctx.sync(); });',
+    },
+    {
+        "id": "seg-5", "description": "Calculate Tax Owed with ROUND",
+        "sheet_context": ["E2:E8"], "predecessors": ["seg-3"],
+        "explanation": "Fills E2:E8 with =ROUND(C*D,2) formulas so each row shows the exact tax liability rounded to cents.",
+        "qa_pairs": [
+            {"q":"Why ROUND to 2 decimals?","a":"Tax authorities require cent-level precision; floating-point arithmetic without ROUND can produce $0.001 rounding errors that fail validation."},
+            {"q":"Why not just C*D?","a":"Bare multiplication accumulates floating-point error across rows; ROUND ensures the SUM of individual amounts matches the rounded total."},
+        ],
+        "edit_suggestions": ["Add a 10% self-employment tax surcharge on Freelance rows","Use ROUNDUP instead of ROUND","Apply a $2000 standard deduction before calculating"],
+        "parameters": [
+            {"label":"Rounding decimals","key":"2","value":2,"type":"select","options":["0","1","2"]},
+        ],
+        "code": 'await Excel.run(async (ctx) => { const s=ctx.workbook.worksheets.getActiveWorksheet(); for(let i=2;i<=8;i++){ s.getRange("E"+i).formulas=[["=ROUND(C"+i+"*D"+i+",2)"]]; } s.getRange("C2:C8").numberFormat="$#,##0"; s.getRange("E2:E8").numberFormat="$#,##0.00"; await ctx.sync(); });',
+    },
+    {
+        "id": "seg-6", "description": "Fill Status column with withholding logic",
+        "sheet_context": ["F2:F8"], "predecessors": ["seg-5"],
+        "explanation": "Labels each row: 'Withheld' if the source typically withholds tax, 'Owed' if the filer must pay, 'Refund' if overpaid. Colour-codes each status.",
+        "qa_pairs": [
+            {"q":"Why hard-code Withheld for W-2?","a":"W-2 employers are legally required to withhold; the sheet correctly reflects that the liability is pre-paid."},
+            {"q":"Why colour the status cells?","a":"A tax preparer reviewing the sheet can instantly see which rows require action vs. which are already settled."},
+        ],
+        "edit_suggestions": ["Add a 'Partial' status for estimated payments","Change the Owed color to orange","Mark all Freelance rows as Owed"],
+        "parameters": [
+            {"label":"Withheld color","key":"#d4edda","value":"#d4edda","type":"color"},
+            {"label":"Owed color","key":"#fdecea","value":"#fdecea","type":"color"},
+            {"label":"Withheld font","key":"#1a7a4a","value":"#1a7a4a","type":"color"},
+            {"label":"Owed font","key":"#b94040","value":"#b94040","type":"color"},
+        ],
+        "code": 'await Excel.run(async (ctx) => { const s=ctx.workbook.worksheets.getActiveWorksheet(); const statuses=[["Withheld"],["Withheld"],["Owed"],["Owed"],["Owed"],["Owed"],["Withheld"]]; s.getRange("F2:F8").values=statuses; [2,3,8].forEach(r=>{ s.getRange("F"+r).format.fill.color="#d4edda"; s.getRange("F"+r).format.font.color="#1a7a4a"; s.getRange("F"+r).format.font.bold=true; }); [4,5,6,7].forEach(r=>{ s.getRange("F"+r).format.fill.color="#fdecea"; s.getRange("F"+r).format.font.color="#b94040"; s.getRange("F"+r).format.font.bold=true; }); await ctx.sync(); });',
+    },
+    {
+        "id": "seg-7", "description": "Add summary section and auto-fit",
+        "sheet_context": ["A10:F12","A1:F8"], "predecessors": ["seg-5","seg-6"],
+        "explanation": "Appends a three-row summary below the data: Total Income, Total Tax Owed, and Effective Rate. Auto-fits columns.",
+        "qa_pairs": [
+            {"q":"Why show effective rate?","a":"The marginal bracket rate is misleading — the effective rate (total tax ÷ total income) is what the filer actually pays and is more useful for planning."},
+            {"q":"Why leave row 9 blank?","a":"A visual separator between the detail rows and the summary block improves readability."},
+        ],
+        "edit_suggestions": ["Add a Total Tax Withheld row","Show the refund or amount owed net","Add a tax planning target rate row"],
+        "parameters": [
+            {"label":"Summary background","key":"#1a2744","value":"#1a2744","type":"color"},
+            {"label":"Summary font","key":"#f5c842","value":"#f5c842","type":"color"},
+        ],
+        "code": 'await Excel.run(async (ctx) => { const s=ctx.workbook.worksheets.getActiveWorksheet(); s.getRange("A10").values=[["SUMMARY"]]; s.getRange("A10:F10").format.fill.color="#1a2744"; s.getRange("A10:F10").format.font.color="#f5c842"; s.getRange("A10:F10").format.font.bold=true; s.getRange("A11:B11").values=[["Total Income","=SUM(C2:C8)"]]; s.getRange("A12:B12").values=[["Total Tax Owed","=SUM(E2:E8)"]]; s.getRange("A13:B13").values=[["Effective Rate","=B12/B11"]]; s.getRange("B11:B12").numberFormat="$#,##0.00"; s.getRange("B13").numberFormat="0.00%"; s.getRange("A11:B13").format.font.bold=true; s.getRange("A1:F13").getEntireColumn().format.autofitColumns(); await ctx.sync(); });',
     },
 ]
 
@@ -253,7 +303,7 @@ STUBS = {
 
 STUB_META = {
     "pnl":       {"label": "📊 P&L Dashboard",    "description": "Monthly revenue, expenses & profit with growth % and colour coding"},
-    "sales":     {"label": "🏆 Sales Tracker",     "description": "Rep performance by quarter with totals, averages and top performer highlight"},
+    "sales":     {"label": "🧾 Tax Filing",       "description": "Income sources with tax brackets, ROUND formulas, withholding status and effective rate summary"},
     "inventory": {"label": "📦 Inventory Summary", "description": "Product stock levels with low-stock alerts and value calculations"},
 }
 
@@ -277,14 +327,15 @@ STUB_RUBRICS = {
     "sales": {
         "stub_key": "sales",
         "hard_requirements": [
-            {"id":"h1","label":"Header row with Rep, Region, Q1–Q4 columns","checked":False},
-            {"id":"h2","label":"At least 6 sales reps populated","checked":False},
-            {"id":"h3","label":"Total and average columns calculated","checked":False},
+            {"id":"h1","label":"Headers include Category, Description, Gross Amount, Tax Rate, Tax Owed, Status","checked":False},
+            {"id":"h2","label":"Tax Owed column uses ROUND(Amount × Rate, 2) formulas","checked":False},
+            {"id":"h3","label":"All seven income rows populated with correct categories","checked":False},
         ],
         "soft_requirements": [
-            {"id":"s1","label":"Top performer visually highlighted","checked":False},
-            {"id":"s2","label":"Numbers formatted as currency","checked":False},
-            {"id":"s3","label":"Header row frozen for scrolling","checked":False},
+            {"id":"s1","label":"Tax brackets visually colour-coded by rate","checked":False},
+            {"id":"s2","label":"Status column distinguishes Withheld vs Owed rows","checked":False},
+            {"id":"s3","label":"Summary section shows Total Income, Total Tax, Effective Rate","checked":False},
+            {"id":"s4","label":"Column widths auto-fitted for readability","checked":False},
         ],
     },
     "inventory": {
@@ -313,12 +364,13 @@ STUB_VERIFIES = {
         {"id":"s4","met":False,"reasoning":"autofitColumns called but column A may be too narrow for long labels.","references":["A1"]},
     ],
     "sales": [
-        {"id":"h1","met":True, "reasoning":"Row 1 contains Rep, Region, Q1, Q2, Q3, Q4 headers.","references":["A1:F1"]},
-        {"id":"h2","met":True, "reasoning":"6 reps populated in rows 2–7.","references":["A2:A7"]},
-        {"id":"h3","met":True, "reasoning":"Total (G) and Avg/Q (H) formulas present for all reps.","references":["G2:H7"]},
-        {"id":"s1","met":True, "reasoning":"Top performer row highlighted in green bold.","references":["A2:H7"]},
-        {"id":"s2","met":True, "reasoning":"$#,##0 format applied to C2:H7.","references":["C2:H7"]},
-        {"id":"s3","met":True, "reasoning":"Row 1 frozen via freezeRows(1).","references":["A1"]},
+        {"id":"h1","met":True, "reasoning":"Row 1 contains all six required headers.","references":["A1:F1"]},
+        {"id":"h2","met":True, "reasoning":"E2:E8 contains =ROUND(C*D,2) formulas for each row.","references":["E2:E8"]},
+        {"id":"h3","met":True, "reasoning":"Seven income rows populated across Employment, Freelance, Investment, Rental.","references":["A2:D8"]},
+        {"id":"s1","met":True, "reasoning":"Rows shaded by bracket: blue (22%), yellow (24%), green (15%).","references":["A2:F8"]},
+        {"id":"s2","met":True, "reasoning":"F2:F8 contains Withheld/Owed labels with colour coding.","references":["F2:F8"]},
+        {"id":"s3","met":True, "reasoning":"Rows 11–13 contain Total Income, Total Tax Owed, Effective Rate.","references":["A11:B13"]},
+        {"id":"s4","met":True, "reasoning":"autofitColumns called on A1:F13.","references":["A1:F13"]},
     ],
     "inventory": [
         {"id":"h1","met":True, "reasoning":"Row 1 contains SKU, Product, Category, Stock, Reorder Pt, Unit Cost, Stock Value.","references":["A1:G1"]},
