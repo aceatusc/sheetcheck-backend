@@ -14,6 +14,7 @@ raise RuntimeError on every subsequent Flask request thread.
 
 from __future__ import annotations
 
+import json
 import logging
 from typing import Any
 
@@ -41,20 +42,33 @@ def call_program(endpoint: str, **kwargs) -> Any:
     """
     Run the DSPy program for `endpoint` using a thread-local LM context.
 
-    We use `dspy.context(lm=...)` instead of `dspy.configure()` because
-    Flask handles each request in its own thread and dspy.configure() raises
-    RuntimeError if called from any thread other than the one that first
-    configured it. dspy.context() is a thread-local context manager that is
-    safe to use from any thread.
+    Uses dspy.context(lm=...) instead of dspy.configure() so each Flask
+    request thread can independently set its LM without racing on global state.
+    Every call is logged via memor (llm_logger.py) for reproducibility.
     """
     import dspy
     from dspy_programs import get_lm, get_program
+    from llm_logger import log_call
+
     cfg    = ENDPOINT_MODELS[endpoint]
     prefix = _PROVIDER_PREFIX[cfg.provider]
     key    = _PROVIDER_KEY[cfg.provider]
     lm     = get_lm(prefix, cfg.model.value, key)
-    with dspy.context(lm=lm):
-        return get_program(endpoint)(**kwargs)
+    model  = cfg.model.value
+
+    with log_call(endpoint, model=model) as call_log:
+        # Log a compact summary of the inputs as the prompt record
+        prompt_summary = {k: (str(v)[:500] if not isinstance(v, str) else v[:500])
+                          for k, v in kwargs.items()}
+        call_log.set_prompt(json.dumps(prompt_summary, indent=2, default=str))
+
+        with dspy.context(lm=lm):
+            result = get_program(endpoint)(**kwargs)
+
+        # Log a compact summary of the output as the response record
+        call_log.set_response(str(result)[:2000])
+
+    return result
 
 
 def _make_ws_context(ws_context: dict):
