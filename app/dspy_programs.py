@@ -1,32 +1,24 @@
 """
-dspy_programs.py — DSPy signatures and compiled programs for SheetCheck.
+dspy_programs.py — DSPy signatures and programs for SheetCheck.
 
-Each endpoint gets a typed Signature (inputs → outputs) and a Program
-(a dspy.Module that wraps the signature with chain-of-thought or other
-predictors).
+Pydantic models define the exact shape of every input and output.
+DSPy uses them to:
+  - Inject a JSON schema into the prompt automatically
+  - Parse and validate the LLM response back into typed objects
+  - Give you `.model_dump()` for free instead of manual parse_json() calls
 
-Usage
-─────
-    from dspy_programs import get_program
-    prog   = get_program("code")
-    result = prog(user_message=..., ws_context=..., hint=...)
-
-All programs return plain Python dicts / lists matching the shapes that
-server.py already expects, so the rest of the stack is unchanged.
-
-DSPy config
-───────────
-Call configure_dspy() once at startup (called from utils.py).
+Programs return typed Pydantic objects. Callers (utils.py) call
+.model_dump() or access fields directly — no raw string parsing needed.
 """
 
 from __future__ import annotations
 
-import json
 import logging
 from functools import lru_cache
-from typing import Any
+from typing import Any, Literal, Optional, Union
 
 import dspy
+from pydantic import BaseModel, Field
 
 logger = logging.getLogger(__name__)
 
@@ -34,16 +26,6 @@ logger = logging.getLogger(__name__)
 # ── DSPy LM configuration ─────────────────────────────────────────────────────
 
 def configure_dspy(provider: str, model: str, api_key: str) -> None:
-    """
-    Wire up the DSPy global LM.
-    Called once per endpoint invocation (cheap — DSPy caches internally).
-
-    DSPy uses LiteLLM routing, so provider prefixes work:
-        anthropic/claude-...
-        openai/gpt-...
-        mistral/mistral-...
-        google/gemini-...
-    """
     lm_id = f"{provider}/{model}"
     try:
         lm = dspy.LM(lm_id, api_key=api_key, max_tokens=8096)
@@ -54,150 +36,201 @@ def configure_dspy(provider: str, model: str, api_key: str) -> None:
         raise
 
 
-# ── Shared field descriptions ─────────────────────────────────────────────────
+# ── Shared sub-models ─────────────────────────────────────────────────────────
 
-_SEG_SCHEMA = """JSON array of code segments. Each segment:
-{
-  "id":               "seg-N",
-  "description":      "Short imperative label",
-  "sheet_context":    ["<range>", ...],
-  "explanation":      "1–2 sentences: inputs → outputs",
-  "predecessors":     ["seg-id", ...],
-  "qa_pairs":         [{"q":"Why ...?","a":"Because ..."}],
-  "edit_suggestions": ["Suggestion 1", "Suggestion 2"],
-  "parameters":       [{"label":"Label","key":"varName","value":42,"type":"number"}],
-  "code":             "await Excel.run(async (ctx) => { ... await ctx.sync(); });"
-}
-Types for parameters.type: number | color | select (+ options:[]) | text
-Respond with ONLY the raw JSON array — no markdown fences, no prose."""
+class QAPair(BaseModel):
+    q: str = Field(description="A 'Why ...?' design question about this step")
+    a: str = Field(description="A concise answer explaining the design choice")
+
+
+class SegmentParameter(BaseModel):
+    label:   str                          = Field(description="Human-readable label shown in the UI")
+    key:     str                          = Field(description="Variable name or literal value this maps to in the code")
+    value:   Union[str, int, float]       = Field(description="Current value of this parameter")
+    type:    Literal["number", "color", "select", "text"] = Field(description="UI control type")
+    options: Optional[list[str]]          = Field(default=None, description="Choices for 'select' type only")
+
+
+class Segment(BaseModel):
+    id:               str                    = Field(description="Unique segment identifier, e.g. 'seg-1'")
+    description:      str                    = Field(description="Short imperative label, e.g. 'Write header row'")
+    sheet_context:    list[str]              = Field(description="Excel range addresses this segment touches, e.g. ['A1:E1']")
+    explanation:      str                    = Field(description="1-2 sentences describing what the code does: inputs → outputs")
+    predecessors:     list[str]              = Field(default_factory=list, description="IDs of segments this one depends on")
+    qa_pairs:         list[QAPair]           = Field(default_factory=list, description="2-3 design Q&A pairs for this step")
+    edit_suggestions: list[str]              = Field(default_factory=list, description="2-3 short prompts for edits the user might want")
+    parameters:       list[SegmentParameter] = Field(default_factory=list, description="Tweakable constants hardcoded in the code")
+    code:             str                    = Field(description="Office JS: await Excel.run(async (ctx) => { ... await ctx.sync(); });")
+    undo_code:        str                    = Field(default="", description="Optional Office JS to reverse this segment")
+
+
+# ── Output models ─────────────────────────────────────────────────────────────
+
+class SegmentList(BaseModel):
+    segments: list[Segment] = Field(description="Ordered list of code segments to execute")
+
+
+class AskAnswer(BaseModel):
+    answer:               str       = Field(description="Clear, concise answer in 1-3 sentences")
+    follow_up_questions:  list[str] = Field(description="2 short suggested follow-up questions")
+
+
+class RubricItem(BaseModel):
+    id:      str  = Field(description="Requirement ID, e.g. 'h1' or 's2'")
+    label:   str  = Field(description="Human-readable requirement text")
+    checked: bool = Field(default=False, description="Whether this requirement is checked off")
+
+
+class Rubric(BaseModel):
+    hard_requirements: list[RubricItem] = Field(description="Must-have correctness criteria (1-2 items)")
+    soft_requirements: list[RubricItem] = Field(description="Nice-to-have quality criteria (1-2 items)")
+
+
+class VerifyResult(BaseModel):
+    id:         str       = Field(description="Rubric item ID this result corresponds to")
+    met:        bool      = Field(description="Whether the worksheet satisfies this requirement")
+    reasoning:  str       = Field(description="One sentence explanation")
+    references: list[str] = Field(description="Cell ranges that support the verdict, e.g. ['A1:E1']")
+
+
+class VerifyResultList(BaseModel):
+    results: list[VerifyResult] = Field(description="One entry per rubric item (hard and soft)")
+
+
+# ── Worksheet context input model ─────────────────────────────────────────────
+
+class WorksheetContext(BaseModel):
+    """Structured representation of the current worksheet state passed from the add-in."""
+    sheetData:    Optional[list[list[Any]]] = Field(default=None, description="2-D array of cell values")
+    namedRanges:  Optional[dict[str, str]]  = Field(default=None, description="Named range → address mapping")
+    activeCell:   Optional[str]             = Field(default=None, description="Currently selected cell address")
+    sheetNames:   Optional[list[str]]       = Field(default=None, description="All sheet names in the workbook")
+
+
+# ── Rubric hint input model ───────────────────────────────────────────────────
+
+class RubricHint(BaseModel):
+    hard_must_satisfy: list[str] = Field(default_factory=list)
+    soft_nice_to_have: list[str] = Field(default_factory=list)
 
 
 # ── Signatures ────────────────────────────────────────────────────────────────
 
 class GenerateSegments(dspy.Signature):
-    """Generate Excel Office JS code segments for a spreadsheet task."""
+    """
+    Generate a sequence of Excel Office JS code segments that together
+    accomplish the user's spreadsheet task. Each segment must be self-contained,
+    independently executable, and include a clear explanation and Q&A pairs.
+    """
+    user_message: str              = dspy.InputField(desc="What the user wants to do in the spreadsheet")
+    ws_context:   WorksheetContext = dspy.InputField(desc="Current worksheet state")
+    rubric_hint:  RubricHint       = dspy.InputField(desc="Optional rubric requirements to satisfy (may be empty)")
+    js_hint:      str              = dspy.InputField(desc="Known JS mistakes and fixes to avoid (may be empty string)")
 
-    # Inputs
-    user_message:  str = dspy.InputField(desc="What the user wants to do in the spreadsheet")
-    ws_context:    str = dspy.InputField(desc="JSON-serialised worksheet context (cells, values, formats)")
-    rubric_hint:   str = dspy.InputField(desc="Optional rubric requirements as JSON (may be empty string)")
-    js_hint:       str = dspy.InputField(desc="Known JS mistakes / fixes to avoid (may be empty string)")
-    schema:        str = dspy.InputField(desc="Expected output schema")
-
-    # Output
-    segments_json: str = dspy.OutputField(desc=_SEG_SCHEMA)
+    result: SegmentList = dspy.OutputField()
 
 
 class EditSegments(dspy.Signature):
-    """Edit an existing segment and regenerate all downstream segments."""
+    """
+    Modify the given segment based on user feedback, then regenerate all
+    downstream segments so they remain consistent with the edit.
+    The output must contain exactly 1 + len(remaining_segments) segments:
+    the edited segment first, then the regenerated remainder in order.
+    """
+    user_message:       str              = dspy.InputField(desc="User's feedback describing the desired change")
+    ws_context:         WorksheetContext = dspy.InputField(desc="Current worksheet state")
+    original_segment:   Segment          = dspy.InputField(desc="The segment to edit")
+    remaining_segments: list[Segment]    = dspy.InputField(desc="Segments that follow the edited one (may be empty)")
+    js_hint:            str              = dspy.InputField(desc="Known JS mistakes and fixes to avoid (may be empty string)")
 
-    user_message:       str = dspy.InputField(desc="User's feedback / edit request")
-    ws_context:         str = dspy.InputField(desc="JSON-serialised worksheet context")
-    original_segment:   str = dspy.InputField(desc="JSON of the segment being edited")
-    remaining_segments: str = dspy.InputField(desc="JSON array of segments that follow the edited one")
-    js_hint:            str = dspy.InputField(desc="Known JS mistakes / fixes to avoid (may be empty string)")
-    schema:             str = dspy.InputField(desc="Expected output schema")
-
-    # Output — same array shape: [edited_seg, ...regenerated_remainder]
-    segments_json: str = dspy.OutputField(
-        desc=_SEG_SCHEMA + "\nFirst element is the edited segment; the rest are the regenerated remainder."
-    )
+    result: SegmentList = dspy.OutputField()
 
 
 class AnswerQuestion(dspy.Signature):
-    """Answer a follow-up question about a specific Excel automation step."""
+    """
+    Answer a follow-up question about a specific step in a spreadsheet
+    automation plan. Be concise and suggest natural follow-up questions.
+    """
+    user_message: str              = dspy.InputField(desc="The user's question")
+    ws_context:   WorksheetContext = dspy.InputField(desc="Current worksheet state")
+    current_step: Segment          = dspy.InputField(desc="The step the user is asking about")
+    history:      list[dict]       = dspy.InputField(desc="Prior conversation turns (may be empty list)")
 
-    user_message: str = dspy.InputField(desc="The user's question")
-    ws_context:   str = dspy.InputField(desc="JSON-serialised worksheet context")
-    current_step: str = dspy.InputField(desc="JSON of the step the user is asking about")
-    history:      str = dspy.InputField(desc="JSON array of prior conversation turns (may be empty)")
-
-    answer_json: str = dspy.OutputField(
-        desc='JSON object: {"answer":"...","follow_up_questions":["...","..."]}'
-    )
+    result: AskAnswer = dspy.OutputField()
 
 
 class ScaffoldRubric(dspy.Signature):
-    """Generate an initial grading rubric for a spreadsheet task."""
+    """
+    Generate a concise grading rubric for a spreadsheet task.
+    Hard requirements are must-have correctness criteria.
+    Soft requirements are nice-to-have quality criteria.
+    Generate 1-2 of each.
+    """
+    user_message: str              = dspy.InputField(desc="Description of the spreadsheet task")
+    ws_context:   WorksheetContext = dspy.InputField(desc="Current worksheet state")
 
-    user_message: str = dspy.InputField(desc="Description of the spreadsheet task")
-    ws_context:   str = dspy.InputField(desc="JSON-serialised worksheet context")
-
-    rubric_json: str = dspy.OutputField(
-        desc=(
-            'JSON object with hard_requirements and soft_requirements arrays. '
-            'Each item: {"id":"h1","label":"...","checked":false}. '
-            'Respond with ONLY the raw JSON object.'
-        )
-    )
+    result: Rubric = dspy.OutputField()
 
 
 class VerifyRubric(dspy.Signature):
-    """Evaluate a worksheet against each rubric requirement."""
+    """
+    Evaluate whether the current worksheet satisfies each rubric requirement.
+    Be precise about cell references and give a one-sentence reasoning per item.
+    """
+    rubric:     Rubric             = dspy.InputField(desc="The rubric to evaluate against")
+    ws_context: WorksheetContext   = dspy.InputField(desc="Current worksheet state")
 
-    rubric:     str = dspy.InputField(desc="JSON of the rubric (hard + soft requirements)")
-    ws_context: str = dspy.InputField(desc="JSON-serialised worksheet state")
-
-    results_json: str = dspy.OutputField(
-        desc=(
-            'JSON array, one entry per rubric item: '
-            '{"id":"h1","met":true,"reasoning":"...","references":["A1:E1"]}. '
-            'Respond with ONLY the raw JSON array.'
-        )
-    )
+    result: VerifyResultList = dspy.OutputField()
 
 
 class ChatResponse(dspy.Signature):
-    """Answer a general spreadsheet / Excel question helpfully and concisely."""
-
-    user_message: str = dspy.InputField(desc="User's question or request")
-    ws_context:   str = dspy.InputField(desc="JSON-serialised worksheet context")
+    """Answer a general Excel / spreadsheet question helpfully and concisely."""
+    user_message: str              = dspy.InputField(desc="User's question or request")
+    ws_context:   WorksheetContext = dspy.InputField(desc="Current worksheet state")
 
     response: str = dspy.OutputField(desc="Helpful, concise answer — markdown OK")
 
 
-# ── Programs (dspy.Module wrappers) ───────────────────────────────────────────
+# ── Programs ──────────────────────────────────────────────────────────────────
 
 class SegmentProgram(dspy.Module):
-    """Chain-of-thought program for /code."""
     def __init__(self):
         self.predict = dspy.ChainOfThought(GenerateSegments)
 
-    def forward(self, **kwargs) -> str:
-        return self.predict(**kwargs).segments_json
+    def forward(self, **kwargs) -> SegmentList:
+        return self.predict(**kwargs).result
 
 
 class EditProgram(dspy.Module):
-    """Chain-of-thought program for /edit."""
     def __init__(self):
         self.predict = dspy.ChainOfThought(EditSegments)
 
-    def forward(self, **kwargs) -> str:
-        return self.predict(**kwargs).segments_json
+    def forward(self, **kwargs) -> SegmentList:
+        return self.predict(**kwargs).result
 
 
 class AskProgram(dspy.Module):
     def __init__(self):
         self.predict = dspy.ChainOfThought(AnswerQuestion)
 
-    def forward(self, **kwargs) -> str:
-        return self.predict(**kwargs).answer_json
+    def forward(self, **kwargs) -> AskAnswer:
+        return self.predict(**kwargs).result
 
 
 class RubricScaffoldProgram(dspy.Module):
     def __init__(self):
         self.predict = dspy.ChainOfThought(ScaffoldRubric)
 
-    def forward(self, **kwargs) -> str:
-        return self.predict(**kwargs).rubric_json
+    def forward(self, **kwargs) -> Rubric:
+        return self.predict(**kwargs).result
 
 
 class RubricVerifyProgram(dspy.Module):
     def __init__(self):
         self.predict = dspy.ChainOfThought(VerifyRubric)
 
-    def forward(self, **kwargs) -> str:
-        return self.predict(**kwargs).results_json
+    def forward(self, **kwargs) -> VerifyResultList:
+        return self.predict(**kwargs).result
 
 
 class ChatProgram(dspy.Module):
@@ -222,7 +255,6 @@ _PROGRAMS: dict[str, type[dspy.Module]] = {
 
 @lru_cache(maxsize=None)
 def get_program(endpoint: str) -> dspy.Module:
-    """Return (and cache) the program instance for `endpoint`."""
     cls = _PROGRAMS.get(endpoint)
     if cls is None:
         raise ValueError(f"No DSPy program for endpoint '{endpoint}'")

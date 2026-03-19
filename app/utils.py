@@ -1,21 +1,17 @@
 """
 utils.py — LLM call dispatch via DSPy programs.
 
-Changes from original
-─────────────────────
-- call_llm() → call_program()  (DSPy-backed, typed I/O)
-- parse_segments() now also runs JS validation via js_validator
-- build_user_prompt() kept for backwards-compat but is lighter —
-  DSPy programs receive structured fields rather than one big prompt blob
-- JS validation errors cause a ValueError that server.py surfaces as 502
-  (same as before), with the validation detail included in the message
+With Pydantic-typed DSPy signatures, programs now return typed objects
+directly. This means:
+  - No more parse_json() / parse_segments() for structured endpoints
+  - No more manual json.dumps() for structured inputs — pass the model
+  - JS validation still runs, now against Segment objects
+  - build_user_prompt() is gone — /chat passes fields directly too
 """
 
 from __future__ import annotations
 
-import json
 import logging
-import re
 from typing import Any
 
 from params import Provider, ENDPOINT_MODELS
@@ -23,7 +19,6 @@ from params import ANTHROPIC_API_KEY, OPENAI_API_KEY, MISTRAL_API_KEY, GEMINI_AP
 
 logger = logging.getLogger(__name__)
 
-# Provider → LiteLLM prefix used by DSPy
 _PROVIDER_PREFIX: dict[Provider, str] = {
     Provider.ANTHROPIC: "anthropic",
     Provider.OPENAI:    "openai",
@@ -31,7 +26,6 @@ _PROVIDER_PREFIX: dict[Provider, str] = {
     Provider.GOOGLE:    "gemini",
 }
 
-# Provider → which API key to pass
 _PROVIDER_KEY: dict[Provider, str] = {
     Provider.ANTHROPIC: ANTHROPIC_API_KEY,
     Provider.OPENAI:    OPENAI_API_KEY,
@@ -39,91 +33,42 @@ _PROVIDER_KEY: dict[Provider, str] = {
     Provider.GOOGLE:    GEMINI_API_KEY,
 }
 
-# Required segment fields
-_REQUIRED_SEG_FIELDS = {"id", "description", "sheet_context", "explanation", "code"}
 
-# Optional defaults to inject
-_SEG_DEFAULTS: dict[str, Any] = {
-    "predecessors":     [],
-    "affordances":      [],
-    "alternatives":     [],
-    "qa_pairs":         [],
-    "edit_suggestions": [],
-    "parameters":       [],
-    "undo_code":        "",
-}
-
-
-# ── DSPy segment schema example (injected into GenerateSegments / EditSegments)
-
-def _segment_schema_example() -> str:
-    """Compact schema hint passed to DSPy programs that produce segments."""
-    from params import STUB_SEGMENTS
-    return json.dumps(STUB_SEGMENTS[:2])  # 2 examples is enough context
-
-
-# ── Public helpers ────────────────────────────────────────────────────────────
-
-def build_user_prompt(user_message: str, ws_context: dict, extra: dict | None = None) -> str:
-    """
-    Legacy helper retained for /chat and any callers that pass a raw prompt.
-    For segment-producing endpoints, prefer call_program() directly.
-    """
-    ctx_block = json.dumps(ws_context, indent=2) if ws_context else "{}"
-    parts = [f"Worksheet context:\n```json\n{ctx_block}\n```\n\nUser request: {user_message}"]
-    if extra:
-        parts.append(f"\nExtra context:\n```json\n{json.dumps(extra, indent=2)}\n```")
-    return "\n".join(parts)
-
-
-def call_program(endpoint: str, **kwargs) -> str:
-    """
-    Configure DSPy for the right provider/model, then run the program.
-    Returns the raw string output from the program.
-    """
+def call_program(endpoint: str, **kwargs) -> Any:
+    """Configure DSPy for the right provider/model and run the program."""
     from dspy_programs import configure_dspy, get_program
 
-    cfg = ENDPOINT_MODELS[endpoint]
+    cfg    = ENDPOINT_MODELS[endpoint]
     prefix = _PROVIDER_PREFIX[cfg.provider]
-    api_key = _PROVIDER_KEY[cfg.provider]
+    key    = _PROVIDER_KEY[cfg.provider]
 
-    configure_dspy(prefix, cfg.model.value, api_key)
-
-    prog = get_program(endpoint)
-    return prog(**kwargs)
+    configure_dspy(prefix, cfg.model.value, key)
+    return get_program(endpoint)(**kwargs)
 
 
-def parse_json(raw_text: str) -> Any:
-    cleaned = re.sub(r"^```(?:json)?\s*", "", raw_text.strip(), flags=re.IGNORECASE)
-    cleaned = re.sub(r"\s*```$", "", cleaned.strip())
-    return json.loads(cleaned)
-
-
-def parse_segments(raw_text: str, validate: bool = True) -> list[dict]:
+def _validate_and_dump_segments(segment_list) -> list[dict]:
     """
-    Parse a JSON array of segments, fill defaults, and optionally
-    run JS validation on each segment's `code` field.
+    Run JS validation on each Segment in a SegmentList, then return
+    plain dicts suitable for JSON serialisation.
     """
-    segments = parse_json(raw_text)
-    if not isinstance(segments, list):
-        raise ValueError("LLM response is not a JSON array")
+    from js_validator import validate_js
+    from dspy_programs import Segment
 
-    for i, seg in enumerate(segments):
-        missing = _REQUIRED_SEG_FIELDS - seg.keys()
-        if missing:
-            raise ValueError(f"Segment {i} missing fields: {missing}")
-        for k, v in _SEG_DEFAULTS.items():
-            seg.setdefault(k, type(v)())  # empty list / empty string
+    failures: list[str] = []
+    dicts: list[dict] = []
 
-    if validate:
-        from js_validator import validate_segments, mistakes_prompt_hint  # noqa: F401
-        validate_segments(segments)
+    for seg in segment_list.segments:
+        vr = validate_js(seg.code, segment_id=seg.id)
+        if not vr.valid:
+            failures.append(f"  [{seg.id}] {'; '.join(vr.errors)}")
+        elif vr.warnings:
+            logger.warning("[%s] JS warnings: %s", seg.id, "; ".join(vr.warnings))
+        dicts.append(seg.model_dump())
 
-    # Strip internal _validation key before returning to client
-    for seg in segments:
-        seg.pop("_validation", None)
+    if failures:
+        raise ValueError("JS validation failed for segments:\n" + "\n".join(failures))
 
-    return segments
+    return dicts
 
 
 # ── Convenience wrappers used by server.py ────────────────────────────────────
@@ -132,31 +77,25 @@ def generate_segments(
     user_message: str,
     ws_context: dict,
     rubric: dict | None = None,
-    js_hint: str = "",
 ) -> list[dict]:
-    """
-    Shared logic for /code and /edit (code generation path).
-    Returns validated, parsed segment list.
-    """
     from js_validator import mistakes_prompt_hint
+    from dspy_programs import WorksheetContext, RubricHint
 
-    hint = js_hint or mistakes_prompt_hint()
-
-    rubric_hint = ""
+    rubric_hint = RubricHint()
     if rubric:
-        hard = [r["label"] for r in rubric.get("hard_requirements", [])]
-        soft = [r["label"] for r in rubric.get("soft_requirements", [])]
-        rubric_hint = json.dumps({"hard_must_satisfy": hard, "soft_nice_to_have": soft})
+        rubric_hint = RubricHint(
+            hard_must_satisfy=[r["label"] for r in rubric.get("hard_requirements", [])],
+            soft_nice_to_have=[r["label"] for r in rubric.get("soft_requirements", [])],
+        )
 
-    raw = call_program(
+    result = call_program(
         "code",
         user_message=user_message,
-        ws_context=json.dumps(ws_context, indent=2) if ws_context else "{}",
+        ws_context=WorksheetContext(**ws_context) if ws_context else WorksheetContext(),
         rubric_hint=rubric_hint,
-        js_hint=hint,
-        schema=_segment_schema_example(),
+        js_hint=mistakes_prompt_hint(),
     )
-    return parse_segments(raw)
+    return _validate_and_dump_segments(result)
 
 
 def edit_segments(
@@ -164,21 +103,70 @@ def edit_segments(
     ws_context: dict,
     original_segment: dict,
     remaining_segments: list[dict],
-    js_hint: str = "",
 ) -> list[dict]:
-    """
-    /edit path: modify a segment and regenerate its downstream chain.
-    """
     from js_validator import mistakes_prompt_hint
+    from dspy_programs import WorksheetContext, Segment
 
-    hint = js_hint or mistakes_prompt_hint()
-    raw = call_program(
+    result = call_program(
         "edit",
         user_message=user_message or "Apply user feedback to this segment and update the remainder.",
-        ws_context=json.dumps(ws_context, indent=2) if ws_context else "{}",
-        original_segment=json.dumps(original_segment),
-        remaining_segments=json.dumps(remaining_segments),
-        js_hint=hint,
-        schema=_segment_schema_example(),
+        ws_context=WorksheetContext(**ws_context) if ws_context else WorksheetContext(),
+        original_segment=Segment(**original_segment),
+        remaining_segments=[Segment(**s) for s in remaining_segments],
+        js_hint=mistakes_prompt_hint(),
     )
-    return parse_segments(raw)
+    return _validate_and_dump_segments(result)
+
+
+def ask_question(
+    user_message: str,
+    ws_context: dict,
+    step: dict,
+    history: list,
+) -> dict:
+    from dspy_programs import WorksheetContext, Segment
+
+    result = call_program(
+        "ask",
+        user_message=user_message,
+        ws_context=WorksheetContext(**ws_context) if ws_context else WorksheetContext(),
+        current_step=Segment(**step) if step else Segment(id="", description="", sheet_context=[], explanation="", code=""),
+        history=history,
+    )
+    return result.model_dump()
+
+
+def scaffold_rubric(user_message: str, ws_context: dict) -> dict:
+    from dspy_programs import WorksheetContext
+
+    result = call_program(
+        "rubric_scaffold",
+        user_message=user_message,
+        ws_context=WorksheetContext(**ws_context) if ws_context else WorksheetContext(),
+    )
+    return result.model_dump()
+
+
+def verify_rubric(rubric: dict, ws_context: dict) -> list[dict]:
+    from dspy_programs import WorksheetContext, Rubric, RubricItem
+
+    rubric_model = Rubric(
+        hard_requirements=[RubricItem(**r) for r in rubric.get("hard_requirements", [])],
+        soft_requirements=[RubricItem(**r) for r in rubric.get("soft_requirements", [])],
+    )
+    result = call_program(
+        "rubric_verify",
+        rubric=rubric_model,
+        ws_context=WorksheetContext(**ws_context) if ws_context else WorksheetContext(),
+    )
+    return [r.model_dump() for r in result.results]
+
+
+def chat_response(user_message: str, ws_context: dict) -> str:
+    from dspy_programs import WorksheetContext
+
+    return call_program(
+        "chat",
+        user_message=user_message,
+        ws_context=WorksheetContext(**ws_context) if ws_context else WorksheetContext(),
+    )

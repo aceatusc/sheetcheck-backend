@@ -1,26 +1,7 @@
 """
-server.py — SheetCheck API proxy (refactored)
-
-Routes
-──────
-  GET  /addin/health
-  POST /addin/code            — generate code segments from user task
-  POST /addin/ask             — follow-up Q&A about a specific step
-  POST /addin/edit            — modify a segment + regenerate remainder
-  POST /addin/rubric/scaffold — generate initial rubric for a task
-  POST /addin/rubric/verify   — evaluate worksheet against rubric
-  POST /addin/chat            — general LLM chat proxy
-
-Key changes from original
-─────────────────────────
-  - /code and /edit share generate_segments() / edit_segments() from utils.py
-  - All LLM calls go through DSPy programs (dspy_programs.py)
-  - Generated JS is validated before returning (js_validator.py)
-  - Auth + body parsing collapsed into reusable decorators
-  - No raw prompt strings in this file; those live in dspy_programs.py
+server.py — SheetCheck API proxy
 """
 
-import json
 import logging
 from functools import wraps
 
@@ -28,14 +9,14 @@ from flask import Flask, Blueprint, jsonify, request
 from flask_cors import CORS
 
 from params import SHARED_SECRET, STUB_RUBRIC, STUB_ASK, STUB_EDIT, STUB_VERIFY
-from stubs import STUBS, STUB_META, STUB_RUBRICS, STUB_VERIFIES
+from stubs import STUBS, STUB_RUBRICS, STUB_VERIFIES
 from utils import (
-    build_user_prompt,   # still used by /chat legacy path
-    call_program,
-    parse_json,
-    parse_segments,
     generate_segments,
     edit_segments,
+    ask_question,
+    scaffold_rubric,
+    verify_rubric,
+    chat_response,
 )
 
 logging.basicConfig(level=logging.INFO)
@@ -49,7 +30,6 @@ addin = Blueprint("addin", __name__, url_prefix="/addin")
 # ── Decorators ────────────────────────────────────────────────────────────────
 
 def require_auth(f):
-    """Reject requests that don't carry the shared secret."""
     @wraps(f)
     def wrapper(*args, **kwargs):
         if request.headers.get("X-Addin-Secret", "") != SHARED_SECRET:
@@ -59,7 +39,6 @@ def require_auth(f):
 
 
 def require_json(f):
-    """Parse JSON body; return 400 if missing or malformed."""
     @wraps(f)
     def wrapper(*args, **kwargs):
         body = request.get_json(silent=True)
@@ -70,7 +49,6 @@ def require_json(f):
 
 
 def handle_llm_errors(f):
-    """Catch LLM / parse / validation errors and return 502."""
     @wraps(f)
     def wrapper(*args, **kwargs):
         try:
@@ -103,7 +81,6 @@ def code(body: dict):
     if not message:
         return jsonify({"error": "message is required"}), 400
 
-    # Stub trigger: "stub:KEY" → return canned demo, no LLM
     if message.lower().startswith("stub:"):
         key  = message[5:].strip().lower()
         segs = STUBS.get(key)
@@ -127,18 +104,10 @@ def ask(body: dict):
 
     if not message:
         return jsonify({"error": "message is required"}), 400
-
     if message.lower() == "test":
         return jsonify(STUB_ASK)
 
-    raw = call_program(
-        "ask",
-        user_message=message,
-        ws_context=json.dumps(context, indent=2) if context else "{}",
-        current_step=json.dumps(step),
-        history=json.dumps(history),
-    )
-    return jsonify(parse_json(raw))
+    return jsonify(ask_question(message, context, step, history))
 
 
 @addin.route("/edit", methods=["POST"])
@@ -154,13 +123,7 @@ def edit(body: dict):
     if message.lower() == "test":
         return jsonify({"segments": STUB_EDIT})
 
-    # /edit is identical to /code but scoped: produces [edited_seg, ...remainder]
-    segments = edit_segments(
-        user_message=message,
-        ws_context=context,
-        original_segment=original_segment,
-        remaining_segments=remaining_segments,
-    )
+    segments = edit_segments(message, context, original_segment, remaining_segments)
     return jsonify({"segments": segments})
 
 
@@ -174,17 +137,11 @@ def rubric_scaffold(body: dict):
 
     if not message:
         return jsonify(STUB_RUBRIC)
-
     if message.lower().startswith("stub:"):
         key = message[5:].strip().lower()
         return jsonify(STUB_RUBRICS.get(key, STUB_RUBRIC))
 
-    raw = call_program(
-        "rubric_scaffold",
-        user_message=message,
-        ws_context=json.dumps(context, indent=2) if context else "{}",
-    )
-    return jsonify(parse_json(raw))
+    return jsonify(scaffold_rubric(message, context))
 
 
 @addin.route("/rubric/verify", methods=["POST"])
@@ -195,21 +152,13 @@ def rubric_verify(body: dict):
     rubric  = body.get("rubric", {})
     context = body.get("context", {})
 
-    # Route to per-stub canned results
     stub_key = rubric.get("stub_key", "")
     if stub_key and stub_key in STUB_VERIFIES:
         return jsonify({"results": STUB_VERIFIES[stub_key]})
-
-    # Fallback stub if no sheet data provided
     if not context.get("sheetData"):
         return jsonify({"results": STUB_VERIFY})
 
-    raw = call_program(
-        "rubric_verify",
-        rubric=json.dumps(rubric),
-        ws_context=json.dumps(context, indent=2),
-    )
-    return jsonify({"results": parse_json(raw)})
+    return jsonify({"results": verify_rubric(rubric, context)})
 
 
 @addin.route("/chat", methods=["POST"])
@@ -222,19 +171,11 @@ def chat(body: dict):
 
     if not message:
         return jsonify({"error": "message is required"}), 400
-
     if message.lower() == "test":
         return jsonify({"response": "[stub] The assistant is ready to help with your spreadsheet questions!"})
 
-    raw = call_program(
-        "chat",
-        user_message=message,
-        ws_context=json.dumps(context, indent=2) if context else "{}",
-    )
-    return jsonify({"response": raw})
+    return jsonify({"response": chat_response(message, context)})
 
-
-# ── Run ───────────────────────────────────────────────────────────────────────
 
 app.register_blueprint(addin)
 
