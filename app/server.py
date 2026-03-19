@@ -1,14 +1,16 @@
 """
-server.py — SheetCheck API proxy
+server.py -- SheetCheck API proxy
 """
 
 import logging
+import threading
 from functools import wraps
 
 from flask import Flask, Blueprint, jsonify, request
 from flask_cors import CORS
 
-from params import SHARED_SECRET, STUB_RUBRIC, STUB_ASK, STUB_EDIT, STUB_VERIFY
+from params import SHARED_SECRET, STUB_RUBRIC, STUB_ASK, STUB_EDIT, STUB_VERIFY, ENDPOINT_MODELS, Provider
+from params import ANTHROPIC_API_KEY, OPENAI_API_KEY, MISTRAL_API_KEY, GEMINI_API_KEY
 from stubs import STUBS, STUB_RUBRICS, STUB_VERIFIES
 from utils import (
     generate_segments,
@@ -17,6 +19,8 @@ from utils import (
     scaffold_rubric,
     verify_rubric,
     chat_response,
+    _PROVIDER_PREFIX,
+    _PROVIDER_KEY,
 )
 
 logging.basicConfig(level=logging.INFO)
@@ -25,6 +29,49 @@ logger = logging.getLogger(__name__)
 app   = Flask(__name__)
 CORS(app)
 addin = Blueprint("addin", __name__, url_prefix="/addin")
+
+
+# -- Startup warm-up ----------------------------------------------------------
+#
+# On first request, several things are slow:
+#   1. Heavy imports (dspy, pydantic, anthropic SDK, etc.) loaded lazily
+#   2. dspy.LM() opening a connection and validating against the provider API
+#   3. dspy.Module / ChainOfThought objects being instantiated
+#
+# We pre-warm all of these in a background thread at startup so the first real
+# user request hits only the LLM round-trip latency, not initialization overhead.
+# The background thread runs after the Flask app is fully set up, so it does not
+# block startup or affect gunicorn worker forking.
+
+def _warmup():
+    try:
+        logger.info("[Warmup] Pre-warming DSPy programs and LM clients...")
+        import dspy
+        from dspy_programs import get_lm, get_program
+
+        endpoints = list(ENDPOINT_MODELS.keys())
+        for endpoint in endpoints:
+            cfg    = ENDPOINT_MODELS[endpoint]
+            prefix = _PROVIDER_PREFIX[cfg.provider]
+            key    = _PROVIDER_KEY[cfg.provider]
+            # Cache the LM client (opens provider connection)
+            get_lm(prefix, cfg.model.value, key)
+            # Cache the program instance (instantiates ChainOfThought)
+            get_program(endpoint)
+            logger.info("[Warmup]   %s -> %s/%s", endpoint, prefix, cfg.model.value)
+
+        # Also force-import the validator so esprima is ready
+        from js_validator import load_known_fixes, load_mistakes
+        load_known_fixes()
+        load_mistakes(limit=1)
+
+        logger.info("[Warmup] Done -- all programs and LM clients ready.")
+    except Exception as exc:
+        # Warmup failure is non-fatal -- requests will still work, just slower
+        # on the first call.
+        logger.warning("[Warmup] Failed (non-fatal): %s", exc)
+
+threading.Thread(target=_warmup, daemon=True, name="dspy-warmup").start()
 
 
 # ── Decorators ────────────────────────────────────────────────────────────────
