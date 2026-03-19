@@ -1,0 +1,9 @@
+{
+  "numberFormat assigned plain string on multi-cell range": "Wrap in a 2-D array matching the range dimensions: range.numberFormat = [['$#,##0','$#,##0'],['$#,##0','$#,##0']]",
+  "values assigned 1-D array": "Excel JS API requires a 2-D array: range.values = [['a','b'],['c','d']]",
+  "Excel.run callback missing async": "Always use: Excel.run(async (ctx) => { ... await ctx.sync(); })",
+  "Missing await ctx.sync()": "Call await ctx.sync() at least once before the function returns to flush all queued operations",
+  "getRange with hard-coded very large row numbers": "Avoid row numbers > 1048576; use dynamic range addressing instead",
+  "forEach loop with multiple ctx.sync inside": "Batch all range operations first, then call ctx.sync() once at the end — multiple syncs inside a loop are slow and error-prone",
+  "load() called after ctx.sync()": "Call range.load('values') BEFORE ctx.sync(); values are only populated after the sync"
+}
