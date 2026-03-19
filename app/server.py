@@ -63,7 +63,16 @@ def code():
             return jsonify({"segments": segs})
         return jsonify({"error": f"Unknown stub '{key}'. Valid: {list(STUBS.keys())}"}), 400
 
-    extra = {"rubric": rubric} if rubric else None
+    extra = None
+    if rubric:
+        hard = [r['label'] for r in rubric.get('hard_requirements', [])]
+        soft = [r['label'] for r in rubric.get('soft_requirements', [])]
+        extra = {
+            "requirements": {
+                "hard_must_satisfy": hard,
+                "soft_nice_to_have": soft,
+            }
+        }
     prompt = build_user_prompt(message, context, extra)
     try:
         raw = call_llm("code", prompt)
