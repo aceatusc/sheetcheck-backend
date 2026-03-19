@@ -28,7 +28,7 @@ _PROVIDER_PREFIX: dict[Provider, str] = {
     Provider.ANTHROPIC: "anthropic",
     Provider.OPENAI:    "openai",
     Provider.MISTRAL:   "mistral",
-    Provider.GOOGLE:    "google",
+    Provider.GOOGLE:    "gemini",
 }
 
 # Provider → which API key to pass
