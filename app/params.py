@@ -291,7 +291,7 @@ The user will describe their task. Respond with ONLY a JSON object:
   ]
 }
 
-Generate 2-3 hard and 3-4 soft requirements. Hard = must-have correctness criteria. Soft = quality/style preferences.
+Generate 1-2 hard and 1-2 soft requirements. Hard = must-have correctness criteria. Soft = nice-to have criteria.
 Respond with ONLY the JSON, no markdown.
 """,
 
