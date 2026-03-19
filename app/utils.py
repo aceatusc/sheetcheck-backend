@@ -1,13 +1,74 @@
-"""Server utilities — LLM call dispatch."""
+"""
+utils.py — LLM call dispatch via DSPy programs.
+
+Changes from original
+─────────────────────
+- call_llm() → call_program()  (DSPy-backed, typed I/O)
+- parse_segments() now also runs JS validation via js_validator
+- build_user_prompt() kept for backwards-compat but is lighter —
+  DSPy programs receive structured fields rather than one big prompt blob
+- JS validation errors cause a ValueError that server.py surfaces as 502
+  (same as before), with the validation detail included in the message
+"""
+
+from __future__ import annotations
 
 import json
+import logging
 import re
+from typing import Any
 
-from params import Provider, ENDPOINT_MODELS, SYSTEM_PROMPTS
+from params import Provider, ENDPOINT_MODELS
 from params import ANTHROPIC_API_KEY, OPENAI_API_KEY, MISTRAL_API_KEY, GEMINI_API_KEY
 
+logger = logging.getLogger(__name__)
 
-def build_user_prompt(user_message: str, ws_context: dict, extra: dict = None) -> str:
+# Provider → LiteLLM prefix used by DSPy
+_PROVIDER_PREFIX: dict[Provider, str] = {
+    Provider.ANTHROPIC: "anthropic",
+    Provider.OPENAI:    "openai",
+    Provider.MISTRAL:   "mistral",
+    Provider.GOOGLE:    "google",
+}
+
+# Provider → which API key to pass
+_PROVIDER_KEY: dict[Provider, str] = {
+    Provider.ANTHROPIC: ANTHROPIC_API_KEY,
+    Provider.OPENAI:    OPENAI_API_KEY,
+    Provider.MISTRAL:   MISTRAL_API_KEY,
+    Provider.GOOGLE:    GEMINI_API_KEY,
+}
+
+# Required segment fields
+_REQUIRED_SEG_FIELDS = {"id", "description", "sheet_context", "explanation", "code"}
+
+# Optional defaults to inject
+_SEG_DEFAULTS: dict[str, Any] = {
+    "predecessors":     [],
+    "affordances":      [],
+    "alternatives":     [],
+    "qa_pairs":         [],
+    "edit_suggestions": [],
+    "parameters":       [],
+    "undo_code":        "",
+}
+
+
+# ── DSPy segment schema example (injected into GenerateSegments / EditSegments)
+
+def _segment_schema_example() -> str:
+    """Compact schema hint passed to DSPy programs that produce segments."""
+    from params import STUB_SEGMENTS
+    return json.dumps(STUB_SEGMENTS[:2])  # 2 examples is enough context
+
+
+# ── Public helpers ────────────────────────────────────────────────────────────
+
+def build_user_prompt(user_message: str, ws_context: dict, extra: dict | None = None) -> str:
+    """
+    Legacy helper retained for /chat and any callers that pass a raw prompt.
+    For segment-producing endpoints, prefer call_program() directly.
+    """
     ctx_block = json.dumps(ws_context, indent=2) if ws_context else "{}"
     parts = [f"Worksheet context:\n```json\n{ctx_block}\n```\n\nUser request: {user_message}"]
     if extra:
@@ -15,74 +76,109 @@ def build_user_prompt(user_message: str, ws_context: dict, extra: dict = None) -
     return "\n".join(parts)
 
 
-def call_llm(endpoint: str, user_prompt: str) -> str:
+def call_program(endpoint: str, **kwargs) -> str:
+    """
+    Configure DSPy for the right provider/model, then run the program.
+    Returns the raw string output from the program.
+    """
+    from dspy_programs import configure_dspy, get_program
+
     cfg = ENDPOINT_MODELS[endpoint]
-    system = SYSTEM_PROMPTS[endpoint]
-    if cfg.provider == Provider.ANTHROPIC:
-        return _call_anthropic(system, user_prompt, cfg.model)
-    elif cfg.provider == Provider.OPENAI:
-        return _call_openai(system, user_prompt, cfg.model)
-    elif cfg.provider == Provider.MISTRAL:
-        return _call_mistralai(system, user_prompt, cfg.model)
-    elif cfg.provider == Provider.GOOGLE:
-        return _call_google(system, user_prompt, cfg.model)
-    else:
-        raise ValueError(f"Unknown provider: {cfg.provider}")
+    prefix = _PROVIDER_PREFIX[cfg.provider]
+    api_key = _PROVIDER_KEY[cfg.provider]
+
+    configure_dspy(prefix, cfg.model, api_key)
+
+    prog = get_program(endpoint)
+    return prog(**kwargs)
 
 
-def _call_anthropic(system: str, user_prompt: str, model: str) -> str:
-    import anthropic
-    client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
-    msg = client.messages.create(model=model, max_tokens=8096, system=system,
-                                  messages=[{"role":"user","content":user_prompt}])
-    return msg.content[0].text
-
-
-def _call_openai(system: str, user_prompt: str, model: str) -> str:
-    from openai import OpenAI
-    client = OpenAI(api_key=OPENAI_API_KEY)
-    r = client.chat.completions.create(model=model, max_tokens=8096,
-        messages=[{"role":"system","content":system},{"role":"user","content":user_prompt}])
-    return r.choices[0].message.content
-
-
-def _call_mistralai(system: str, user_prompt: str, model: str) -> str:
-    from mistralai import Mistral
-    client = Mistral(api_key=MISTRAL_API_KEY)
-    r = client.chat.complete(model=model,
-        messages=[{"role":"system","content":system},{"role":"user","content":user_prompt}])
-    return r.choices[0].message.content
-
-
-def _call_google(system: str, user_prompt: str, model: str) -> str:
-    from google import genai
-    from google.genai import types
-    client = genai.Client(api_key=GEMINI_API_KEY)
-    chat = client.chats.create(model=model,
-        config=types.GenerateContentConfig(system_instruction=system))
-    return chat.send_message(user_prompt).text
-
-
-def parse_json(raw_text: str):
+def parse_json(raw_text: str) -> Any:
     cleaned = re.sub(r"^```(?:json)?\s*", "", raw_text.strip(), flags=re.IGNORECASE)
     cleaned = re.sub(r"\s*```$", "", cleaned.strip())
     return json.loads(cleaned)
 
 
-def parse_segments(raw_text: str) -> list:
+def parse_segments(raw_text: str, validate: bool = True) -> list[dict]:
+    """
+    Parse a JSON array of segments, fill defaults, and optionally
+    run JS validation on each segment's `code` field.
+    """
     segments = parse_json(raw_text)
     if not isinstance(segments, list):
         raise ValueError("LLM response is not a JSON array")
-    required = {"id","description","sheet_context","explanation","code"}
+
     for i, seg in enumerate(segments):
-        missing = required - seg.keys()
+        missing = _REQUIRED_SEG_FIELDS - seg.keys()
         if missing:
             raise ValueError(f"Segment {i} missing fields: {missing}")
-        seg.setdefault("predecessors", [])
-        seg.setdefault("affordances", [])
-        seg.setdefault("alternatives", [])
-        seg.setdefault("qa_pairs", [])
-        seg.setdefault("edit_suggestions", [])
-        seg.setdefault("parameters", [])
-        seg.setdefault("undo_code", "")
+        for k, v in _SEG_DEFAULTS.items():
+            seg.setdefault(k, type(v)())  # empty list / empty string
+
+    if validate:
+        from js_validator import validate_segments, mistakes_prompt_hint  # noqa: F401
+        validate_segments(segments)
+
+    # Strip internal _validation key before returning to client
+    for seg in segments:
+        seg.pop("_validation", None)
+
     return segments
+
+
+# ── Convenience wrappers used by server.py ────────────────────────────────────
+
+def generate_segments(
+    user_message: str,
+    ws_context: dict,
+    rubric: dict | None = None,
+    js_hint: str = "",
+) -> list[dict]:
+    """
+    Shared logic for /code and /edit (code generation path).
+    Returns validated, parsed segment list.
+    """
+    from js_validator import mistakes_prompt_hint
+
+    hint = js_hint or mistakes_prompt_hint()
+
+    rubric_hint = ""
+    if rubric:
+        hard = [r["label"] for r in rubric.get("hard_requirements", [])]
+        soft = [r["label"] for r in rubric.get("soft_requirements", [])]
+        rubric_hint = json.dumps({"hard_must_satisfy": hard, "soft_nice_to_have": soft})
+
+    raw = call_program(
+        "code",
+        user_message=user_message,
+        ws_context=json.dumps(ws_context, indent=2) if ws_context else "{}",
+        rubric_hint=rubric_hint,
+        js_hint=hint,
+        schema=_segment_schema_example(),
+    )
+    return parse_segments(raw)
+
+
+def edit_segments(
+    user_message: str,
+    ws_context: dict,
+    original_segment: dict,
+    remaining_segments: list[dict],
+    js_hint: str = "",
+) -> list[dict]:
+    """
+    /edit path: modify a segment and regenerate its downstream chain.
+    """
+    from js_validator import mistakes_prompt_hint
+
+    hint = js_hint or mistakes_prompt_hint()
+    raw = call_program(
+        "edit",
+        user_message=user_message or "Apply user feedback to this segment and update the remainder.",
+        ws_context=json.dumps(ws_context, indent=2) if ws_context else "{}",
+        original_segment=json.dumps(original_segment),
+        remaining_segments=json.dumps(remaining_segments),
+        js_hint=hint,
+        schema=_segment_schema_example(),
+    )
+    return parse_segments(raw)
