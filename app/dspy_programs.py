@@ -31,11 +31,30 @@ logger = logging.getLogger(__name__)
 # We deliberately do NOT call dspy.configure() globally. Each call_program()
 # uses `with dspy.context(lm=...)` which is thread-local and safe.
 
+# Per-endpoint max_tokens budgets.
+# Set to the practical ceiling for each endpoint — segment generation needs
+# headroom for 5-10 segments with code + qa_pairs + parameters each; Q&A and
+# chat produce much shorter outputs and don't need a large budget.
+# All values are well within each provider's hard limits:
+#   Gemini 3 Flash / 3.1 variants: 64,000 output tokens
+#   Mistral Small 2506 / Ministral: 131,072 output tokens
+MAX_TOKENS: dict[str, int] = {
+    "code":            32_000,   # 5-10 segments, each with code + qa + params
+    "edit":            32_000,   # same shape as code
+    "ask":              2_000,   # short answer + 2 follow-up questions
+    "rubric_scaffold":  1_000,   # 2-4 rubric items
+    "rubric_verify":    4_000,   # one reasoning line per rubric item
+    "chat":             2_000,   # conversational answer
+}
+_DEFAULT_MAX_TOKENS = 8_096
+
+
 @lru_cache(maxsize=None)
-def get_lm(provider: str, model: str, api_key: str) -> dspy.LM:
+def get_lm(provider: str, model: str, api_key: str, endpoint: str) -> dspy.LM:
     lm_id = f"{provider}/{model}"
-    logger.debug("Creating LM: %s", lm_id)
-    return dspy.LM(lm_id, api_key=api_key, max_tokens=8096)
+    max_tokens = MAX_TOKENS.get(endpoint, _DEFAULT_MAX_TOKENS)
+    logger.debug("Creating LM: %s (max_tokens=%d)", lm_id, max_tokens)
+    return dspy.LM(lm_id, api_key=api_key, max_tokens=max_tokens)
 
 
 # -- Worksheet context --------------------------------------------------------

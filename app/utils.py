@@ -53,7 +53,7 @@ def call_program(endpoint: str, **kwargs) -> Any:
     cfg    = ENDPOINT_MODELS[endpoint]
     prefix = _PROVIDER_PREFIX[cfg.provider]
     key    = _PROVIDER_KEY[cfg.provider]
-    lm     = get_lm(prefix, cfg.model.value, key)
+    lm     = get_lm(prefix, cfg.model.value, key, endpoint)
     model  = cfg.model.value
 
     with log_call(endpoint, model=model) as call_log:

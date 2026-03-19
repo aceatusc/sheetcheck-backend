@@ -55,7 +55,7 @@ def _warmup():
             prefix = _PROVIDER_PREFIX[cfg.provider]
             key    = _PROVIDER_KEY[cfg.provider]
             # Cache the LM client (opens provider connection)
-            get_lm(prefix, cfg.model.value, key)
+            get_lm(prefix, cfg.model.value, key, endpoint)
             # Cache the program instance (instantiates ChainOfThought)
             get_program(endpoint)
             logger.info("[Warmup]   %s -> %s/%s", endpoint, prefix, cfg.model.value)
