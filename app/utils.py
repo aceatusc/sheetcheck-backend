@@ -1,11 +1,15 @@
 """
 utils.py -- LLM call dispatch via DSPy programs.
 
-All wire-format decisions here are driven by the actual add-in JS:
+All wire-format decisions are driven by the actual add-in JS:
   - WorksheetContext matches worksheetContext.js gather() output exactly
   - ask() receives step as {description, explanation} (StepSummary), not a full Segment
   - scaffold_rubric() returns the Rubric dict directly (not nested)
   - verify_rubric() returns a list of VerifyResult dicts (server wraps in {"results": [...]})
+
+Threading: call_program() uses dspy.context(lm=...) -- a thread-local context manager --
+instead of dspy.configure(), which is locked to the thread that first calls it and would
+raise RuntimeError on every subsequent Flask request thread.
 """
 
 from __future__ import annotations
@@ -34,13 +38,23 @@ _PROVIDER_KEY: dict[Provider, str] = {
 
 
 def call_program(endpoint: str, **kwargs) -> Any:
-    """Configure DSPy for the right provider/model and run the program."""
-    from dspy_programs import configure_dspy, get_program
+    """
+    Run the DSPy program for `endpoint` using a thread-local LM context.
+
+    We use `dspy.context(lm=...)` instead of `dspy.configure()` because
+    Flask handles each request in its own thread and dspy.configure() raises
+    RuntimeError if called from any thread other than the one that first
+    configured it. dspy.context() is a thread-local context manager that is
+    safe to use from any thread.
+    """
+    import dspy
+    from dspy_programs import get_lm, get_program
     cfg    = ENDPOINT_MODELS[endpoint]
     prefix = _PROVIDER_PREFIX[cfg.provider]
     key    = _PROVIDER_KEY[cfg.provider]
-    configure_dspy(prefix, cfg.model.value, key)
-    return get_program(endpoint)(**kwargs)
+    lm     = get_lm(prefix, cfg.model.value, key)
+    with dspy.context(lm=lm):
+        return get_program(endpoint)(**kwargs)
 
 
 def _make_ws_context(ws_context: dict):

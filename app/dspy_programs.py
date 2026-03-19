@@ -1,14 +1,17 @@
 """
 dspy_programs.py -- DSPy signatures and programs for SheetCheck.
 
-Pydantic models mirror the exact wire format the Office add-in sends and
-expects. Shape decisions are driven by the front-end JS:
+Threading note
+--------------
+Flask serves each request in its own thread. dspy.configure() is locked
+to the thread that first calls it, so we must NOT call dspy.configure()
+per-request. Instead, every call_program() passes the LM via dspy.context()
+which is thread-local and safe to use from any thread.
 
-  WorksheetContext  -- matches WorksheetContext.gather() output in worksheetContext.js
-  StepSummary       -- matches the `step` field LLMClient.ask() sends (description+explanation only)
-  AskAnswer         -- matches the { answer, follow_up_questions } shape stepNavigator expects
-  Rubric            -- matches the rubric shape rubricManager uses throughout
-  VerifyResultList  -- matches { results: [...] } that LLMClient.rubricVerify returns
+Wire format
+-----------
+All Pydantic models mirror the exact shapes the Office add-in sends/expects,
+derived from worksheetContext.js, stepNavigator.js, and rubricManager.js.
 """
 
 from __future__ import annotations
@@ -23,20 +26,19 @@ from pydantic import BaseModel, ConfigDict, Field
 logger = logging.getLogger(__name__)
 
 
-# -- DSPy LM configuration ----------------------------------------------------
+# -- LM factory (one LM instance per provider/model, cached) ------------------
+#
+# We deliberately do NOT call dspy.configure() globally. Each call_program()
+# uses `with dspy.context(lm=...)` which is thread-local and safe.
 
-def configure_dspy(provider: str, model: str, api_key: str) -> None:
+@lru_cache(maxsize=None)
+def get_lm(provider: str, model: str, api_key: str) -> dspy.LM:
     lm_id = f"{provider}/{model}"
-    try:
-        lm = dspy.LM(lm_id, api_key=api_key, max_tokens=8096)
-        dspy.configure(lm=lm)
-        logger.debug("DSPy configured: %s", lm_id)
-    except Exception as exc:
-        logger.error("DSPy configure failed for %s: %s", lm_id, exc)
-        raise
+    logger.debug("Creating LM: %s", lm_id)
+    return dspy.LM(lm_id, api_key=api_key, max_tokens=8096)
 
 
-# -- Worksheet context ---------------------------------------------------------
+# -- Worksheet context --------------------------------------------------------
 #
 # worksheetContext.js gather() returns:
 #   {
@@ -45,13 +47,11 @@ def configure_dspy(provider: str, model: str, api_key: str) -> None:
 #     namedRanges: [{ name, value }] | null,
 #     sheetNames:  string[] | null,
 #   }
-#
-# extra="allow" so any new fields the add-in adds never break validation.
 
 class UsedRange(BaseModel):
     model_config = ConfigDict(extra="allow")
-    address: Optional[str]         = None
-    values:  Optional[list[list[Any]]] = None
+    address: Optional[str]              = None
+    values:  Optional[list[list[Any]]]  = None
 
 
 class Selection(BaseModel):
@@ -68,10 +68,10 @@ class SheetData(BaseModel):
 
 class WorksheetContext(BaseModel):
     model_config = ConfigDict(extra="allow")
-    selection:   Optional[Selection]        = None
-    sheetData:   Optional[SheetData]        = None
-    namedRanges: Optional[list[dict]]       = None
-    sheetNames:  Optional[list[str]]        = None
+    selection:   Optional[Selection]  = None
+    sheetData:   Optional[SheetData]  = None
+    namedRanges: Optional[list[dict]] = None
+    sheetNames:  Optional[list[str]]  = None
 
 
 # -- Segment models -----------------------------------------------------------
@@ -106,13 +106,10 @@ class SegmentList(BaseModel):
     segments: list[Segment] = Field(description="Ordered list of code segments to execute")
 
 
-# -- Ask -----------------------------------------------------------------------
-#
-# stepNavigator.js sends: { description, explanation } as the `step` field.
-# We model that as StepSummary rather than a full Segment so the LLM isn't
-# asked to reconstruct fields it was never given.
+# -- Ask ----------------------------------------------------------------------
 
 class StepSummary(BaseModel):
+    """Partial segment shape sent by stepNavigator._onAskSend()."""
     model_config = ConfigDict(extra="allow")
     description: Optional[str] = None
     explanation: Optional[str] = None
@@ -123,11 +120,7 @@ class AskAnswer(BaseModel):
     follow_up_questions: list[str] = Field(description="2 short suggested follow-up questions")
 
 
-# -- Rubric --------------------------------------------------------------------
-#
-# rubricManager.js uses: { hard_requirements: [{id,label,checked}], soft_requirements: [...] }
-# rubricScaffold returns this shape directly (not nested).
-# rubricVerify returns { results: [{id,met,reasoning,references}] }.
+# -- Rubric -------------------------------------------------------------------
 
 class RubricItem(BaseModel):
     id:      str  = Field(description="Requirement ID, e.g. 'h1' or 's2'")
@@ -151,8 +144,6 @@ class VerifyResultList(BaseModel):
     results: list[VerifyResult] = Field(description="One entry per rubric item (hard and soft)")
 
 
-# -- Rubric hint passed to /code ----------------------------------------------
-
 class RubricHint(BaseModel):
     hard_must_satisfy: list[str] = Field(default_factory=list)
     soft_nice_to_have: list[str] = Field(default_factory=list)
@@ -162,9 +153,20 @@ class RubricHint(BaseModel):
 
 class GenerateSegments(dspy.Signature):
     """
-    Generate a sequence of Excel Office JS code segments that together
-    accomplish the user's spreadsheet task. Each segment must be self-contained,
-    independently executable, and include a clear explanation and Q&A pairs.
+    Generate a thorough sequence of Excel Office JS code segments that together
+    fully accomplish the user's spreadsheet task.
+
+    Decompose the task into as many fine-grained steps as make sense -- prefer
+    more segments over fewer. Each distinct concern should be its own segment:
+    writing data, applying formulas, formatting headers, formatting data rows,
+    adding a totals row, colour-coding, auto-fitting columns, etc.
+    A typical task should produce 5-10 segments; complex tasks may need more.
+
+    Each segment must be:
+    - Self-contained and independently executable
+    - Scoped to a single coherent concern (not a catch-all "do everything" step)
+    - Include a clear explanation and 2-3 Q&A pairs
+    - Include all tweakable constants as parameters[]
     """
     user_message: str              = dspy.InputField(desc="What the user wants to do in the spreadsheet")
     ws_context:   WorksheetContext = dspy.InputField(desc="Current worksheet state")
@@ -178,6 +180,12 @@ class EditSegments(dspy.Signature):
     """
     Modify the given segment based on user feedback, then regenerate all
     downstream segments so they remain consistent with the edit.
+
+    Apply the same decomposition principle as code generation: break work into
+    as many fine-grained steps as make sense. Do not collapse remaining steps
+    into fewer segments just because it is an edit -- preserve or increase
+    granularity where appropriate.
+
     Output must contain exactly 1 + len(remaining_segments) segments:
     the edited segment first, then the regenerated remainder in order.
     """
@@ -235,7 +243,7 @@ class ChatResponse(dspy.Signature):
     response: str = dspy.OutputField(desc="Helpful, concise answer -- markdown OK")
 
 
-# -- Programs ------------------------------------------------------------------
+# -- Programs -----------------------------------------------------------------
 
 class SegmentProgram(dspy.Module):
     def __init__(self):
@@ -285,7 +293,7 @@ class ChatProgram(dspy.Module):
         return self.predict(**kwargs).response
 
 
-# -- Registry ------------------------------------------------------------------
+# -- Registry -----------------------------------------------------------------
 
 _PROGRAMS: dict[str, type[dspy.Module]] = {
     "code":            SegmentProgram,
