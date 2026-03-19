@@ -87,7 +87,7 @@ def call_program(endpoint: str, **kwargs) -> str:
     prefix = _PROVIDER_PREFIX[cfg.provider]
     api_key = _PROVIDER_KEY[cfg.provider]
 
-    configure_dspy(prefix, cfg.model, api_key)
+    configure_dspy(prefix, cfg.model.value, api_key)
 
     prog = get_program(endpoint)
     return prog(**kwargs)
