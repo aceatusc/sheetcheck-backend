@@ -118,7 +118,7 @@ class Segment(BaseModel):
     edit_suggestions: list[str]              = Field(default_factory=list, description="2-3 short edit prompts")
     parameters:       list[SegmentParameter] = Field(default_factory=list, description="Tweakable constants in the code")
     code:             str                    = Field(description="await Excel.run(async (ctx) => { ... await ctx.sync(); });")
-    undo_code:        str                    = Field(default="")
+
 
 
 class SegmentList(BaseModel):
