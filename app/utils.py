@@ -1,12 +1,11 @@
 """
-utils.py — LLM call dispatch via DSPy programs.
+utils.py -- LLM call dispatch via DSPy programs.
 
-With Pydantic-typed DSPy signatures, programs now return typed objects
-directly. This means:
-  - No more parse_json() / parse_segments() for structured endpoints
-  - No more manual json.dumps() for structured inputs — pass the model
-  - JS validation still runs, now against Segment objects
-  - build_user_prompt() is gone — /chat passes fields directly too
+All wire-format decisions here are driven by the actual add-in JS:
+  - WorksheetContext matches worksheetContext.js gather() output exactly
+  - ask() receives step as {description, explanation} (StepSummary), not a full Segment
+  - scaffold_rubric() returns the Rubric dict directly (not nested)
+  - verify_rubric() returns a list of VerifyResult dicts (server wraps in {"results": [...]})
 """
 
 from __future__ import annotations
@@ -37,22 +36,27 @@ _PROVIDER_KEY: dict[Provider, str] = {
 def call_program(endpoint: str, **kwargs) -> Any:
     """Configure DSPy for the right provider/model and run the program."""
     from dspy_programs import configure_dspy, get_program
-
     cfg    = ENDPOINT_MODELS[endpoint]
     prefix = _PROVIDER_PREFIX[cfg.provider]
     key    = _PROVIDER_KEY[cfg.provider]
-
     configure_dspy(prefix, cfg.model.value, key)
     return get_program(endpoint)(**kwargs)
 
 
+def _make_ws_context(ws_context: dict):
+    """
+    Construct a WorksheetContext from the raw dict the add-in sends.
+    gather() in worksheetContext.js returns:
+      { selection, sheetData: { usedRange: { address, values } }, namedRanges, sheetNames }
+    extra='allow' on the model means unknown keys are preserved safely.
+    """
+    from dspy_programs import WorksheetContext
+    return WorksheetContext(**ws_context) if ws_context else WorksheetContext()
+
+
 def _validate_and_dump_segments(segment_list) -> list[dict]:
-    """
-    Run JS validation on each Segment in a SegmentList, then return
-    plain dicts suitable for JSON serialisation.
-    """
+    """Run JS validation on each Segment, return plain dicts for JSON serialisation."""
     from js_validator import validate_js
-    from dspy_programs import Segment
 
     failures: list[str] = []
     dicts: list[dict] = []
@@ -71,7 +75,7 @@ def _validate_and_dump_segments(segment_list) -> list[dict]:
     return dicts
 
 
-# ── Convenience wrappers used by server.py ────────────────────────────────────
+# -- Endpoint wrappers --------------------------------------------------------
 
 def generate_segments(
     user_message: str,
@@ -79,7 +83,7 @@ def generate_segments(
     rubric: dict | None = None,
 ) -> list[dict]:
     from js_validator import mistakes_prompt_hint
-    from dspy_programs import WorksheetContext, RubricHint
+    from dspy_programs import RubricHint
 
     rubric_hint = RubricHint()
     if rubric:
@@ -91,7 +95,7 @@ def generate_segments(
     result = call_program(
         "code",
         user_message=user_message,
-        ws_context=WorksheetContext(**ws_context) if ws_context else WorksheetContext(),
+        ws_context=_make_ws_context(ws_context),
         rubric_hint=rubric_hint,
         js_hint=mistakes_prompt_hint(),
     )
@@ -105,12 +109,12 @@ def edit_segments(
     remaining_segments: list[dict],
 ) -> list[dict]:
     from js_validator import mistakes_prompt_hint
-    from dspy_programs import WorksheetContext, Segment
+    from dspy_programs import Segment
 
     result = call_program(
         "edit",
         user_message=user_message or "Apply user feedback to this segment and update the remainder.",
-        ws_context=WorksheetContext(**ws_context) if ws_context else WorksheetContext(),
+        ws_context=_make_ws_context(ws_context),
         original_segment=Segment(**original_segment),
         remaining_segments=[Segment(**s) for s in remaining_segments],
         js_hint=mistakes_prompt_hint(),
@@ -124,31 +128,40 @@ def ask_question(
     step: dict,
     history: list,
 ) -> dict:
-    from dspy_programs import WorksheetContext, Segment
+    """
+    step arrives as { description, explanation } from stepNavigator._onAskSend().
+    We use StepSummary (not full Segment) so the model isn't asked to reconstruct
+    fields it was never given.
+    """
+    from dspy_programs import StepSummary
 
     result = call_program(
         "ask",
         user_message=user_message,
-        ws_context=WorksheetContext(**ws_context) if ws_context else WorksheetContext(),
-        current_step=Segment(**step) if step else Segment(id="", description="", sheet_context=[], explanation="", code=""),
+        ws_context=_make_ws_context(ws_context),
+        current_step=StepSummary(**step) if step else StepSummary(),
         history=history,
     )
     return result.model_dump()
 
 
 def scaffold_rubric(user_message: str, ws_context: dict) -> dict:
-    from dspy_programs import WorksheetContext
-
+    """Returns the rubric dict directly — matches what rubricManager.setRubric() expects."""
     result = call_program(
         "rubric_scaffold",
         user_message=user_message,
-        ws_context=WorksheetContext(**ws_context) if ws_context else WorksheetContext(),
+        ws_context=_make_ws_context(ws_context),
     )
     return result.model_dump()
 
 
 def verify_rubric(rubric: dict, ws_context: dict) -> list[dict]:
-    from dspy_programs import WorksheetContext, Rubric, RubricItem
+    """
+    Returns a list of VerifyResult dicts.
+    server.py wraps this in {"results": [...]} to match what LLMClient.rubricVerify()
+    destructures as res.results in rubricManager.showVerifyResults().
+    """
+    from dspy_programs import Rubric, RubricItem
 
     rubric_model = Rubric(
         hard_requirements=[RubricItem(**r) for r in rubric.get("hard_requirements", [])],
@@ -157,16 +170,14 @@ def verify_rubric(rubric: dict, ws_context: dict) -> list[dict]:
     result = call_program(
         "rubric_verify",
         rubric=rubric_model,
-        ws_context=WorksheetContext(**ws_context) if ws_context else WorksheetContext(),
+        ws_context=_make_ws_context(ws_context),
     )
     return [r.model_dump() for r in result.results]
 
 
 def chat_response(user_message: str, ws_context: dict) -> str:
-    from dspy_programs import WorksheetContext
-
     return call_program(
         "chat",
         user_message=user_message,
-        ws_context=WorksheetContext(**ws_context) if ws_context else WorksheetContext(),
+        ws_context=_make_ws_context(ws_context),
     )

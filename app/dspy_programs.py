@@ -1,12 +1,14 @@
 """
 dspy_programs.py -- DSPy signatures and programs for SheetCheck.
 
-Pydantic models define the exact shape of every input and output.
-DSPy uses them to inject a JSON schema into the prompt, parse the
-response back into typed objects, and validate the result -- no
-manual parse_json() or schema strings needed.
+Pydantic models mirror the exact wire format the Office add-in sends and
+expects. Shape decisions are driven by the front-end JS:
 
-Programs return typed Pydantic objects. Callers use .model_dump().
+  WorksheetContext  -- matches WorksheetContext.gather() output in worksheetContext.js
+  StepSummary       -- matches the `step` field LLMClient.ask() sends (description+explanation only)
+  AskAnswer         -- matches the { answer, follow_up_questions } shape stepNavigator expects
+  Rubric            -- matches the rubric shape rubricManager uses throughout
+  VerifyResultList  -- matches { results: [...] } that LLMClient.rubricVerify returns
 """
 
 from __future__ import annotations
@@ -34,7 +36,45 @@ def configure_dspy(provider: str, model: str, api_key: str) -> None:
         raise
 
 
-# -- Shared sub-models ---------------------------------------------------------
+# -- Worksheet context ---------------------------------------------------------
+#
+# worksheetContext.js gather() returns:
+#   {
+#     selection:  { address, values, formulas } | null,
+#     sheetData:  { usedRange: { address, values } } | null,
+#     namedRanges: [{ name, value }] | null,
+#     sheetNames:  string[] | null,
+#   }
+#
+# extra="allow" so any new fields the add-in adds never break validation.
+
+class UsedRange(BaseModel):
+    model_config = ConfigDict(extra="allow")
+    address: Optional[str]         = None
+    values:  Optional[list[list[Any]]] = None
+
+
+class Selection(BaseModel):
+    model_config = ConfigDict(extra="allow")
+    address:  Optional[str]             = None
+    values:   Optional[list[list[Any]]] = None
+    formulas: Optional[list[list[Any]]] = None
+
+
+class SheetData(BaseModel):
+    model_config = ConfigDict(extra="allow")
+    usedRange: Optional[UsedRange] = None
+
+
+class WorksheetContext(BaseModel):
+    model_config = ConfigDict(extra="allow")
+    selection:   Optional[Selection]        = None
+    sheetData:   Optional[SheetData]        = None
+    namedRanges: Optional[list[dict]]       = None
+    sheetNames:  Optional[list[str]]        = None
+
+
+# -- Segment models -----------------------------------------------------------
 
 class QAPair(BaseModel):
     q: str = Field(description="A 'Why ...?' design question about this step")
@@ -54,24 +94,40 @@ class Segment(BaseModel):
     description:      str                    = Field(description="Short imperative label, e.g. 'Write header row'")
     sheet_context:    list[str]              = Field(description="Excel range addresses this segment touches")
     explanation:      str                    = Field(description="1-2 sentences: inputs to outputs")
-    predecessors:     list[str]              = Field(default_factory=list, description="IDs of segments this one depends on")
+    predecessors:     list[str]              = Field(default_factory=list)
     qa_pairs:         list[QAPair]           = Field(default_factory=list, description="2-3 design Q&A pairs")
     edit_suggestions: list[str]              = Field(default_factory=list, description="2-3 short edit prompts")
     parameters:       list[SegmentParameter] = Field(default_factory=list, description="Tweakable constants in the code")
     code:             str                    = Field(description="await Excel.run(async (ctx) => { ... await ctx.sync(); });")
-    undo_code:        str                    = Field(default="", description="Optional Office JS to reverse this segment")
+    undo_code:        str                    = Field(default="")
 
-
-# -- Output models -------------------------------------------------------------
 
 class SegmentList(BaseModel):
     segments: list[Segment] = Field(description="Ordered list of code segments to execute")
+
+
+# -- Ask -----------------------------------------------------------------------
+#
+# stepNavigator.js sends: { description, explanation } as the `step` field.
+# We model that as StepSummary rather than a full Segment so the LLM isn't
+# asked to reconstruct fields it was never given.
+
+class StepSummary(BaseModel):
+    model_config = ConfigDict(extra="allow")
+    description: Optional[str] = None
+    explanation: Optional[str] = None
 
 
 class AskAnswer(BaseModel):
     answer:              str       = Field(description="Clear, concise answer in 1-3 sentences")
     follow_up_questions: list[str] = Field(description="2 short suggested follow-up questions")
 
+
+# -- Rubric --------------------------------------------------------------------
+#
+# rubricManager.js uses: { hard_requirements: [{id,label,checked}], soft_requirements: [...] }
+# rubricScaffold returns this shape directly (not nested).
+# rubricVerify returns { results: [{id,met,reasoning,references}] }.
 
 class RubricItem(BaseModel):
     id:      str  = Field(description="Requirement ID, e.g. 'h1' or 's2'")
@@ -95,23 +151,7 @@ class VerifyResultList(BaseModel):
     results: list[VerifyResult] = Field(description="One entry per rubric item (hard and soft)")
 
 
-# -- Input models --------------------------------------------------------------
-
-class WorksheetContext(BaseModel):
-    """
-    Current worksheet state as sent by the add-in.
-    extra='allow' means unknown fields pass through unchanged, so this model
-    never breaks when the add-in sends new keys or restructures its payload.
-    """
-    model_config = ConfigDict(extra="allow")
-
-    # Declare the fields we currently know about -- all optional.
-    # The add-in sends usedRange as a nested object with address + values.
-    usedRange:   Optional[dict[str, Any]] = Field(default=None, description="Used range with address and 2-D values array")
-    activeCell:  Optional[str]            = Field(default=None, description="Currently selected cell address")
-    sheetNames:  Optional[list[str]]      = Field(default=None, description="All sheet names in the workbook")
-    namedRanges: Optional[dict[str, str]] = Field(default=None, description="Named range to address mapping")
-
+# -- Rubric hint passed to /code ----------------------------------------------
 
 class RubricHint(BaseModel):
     hard_must_satisfy: list[str] = Field(default_factory=list)
@@ -157,8 +197,8 @@ class AnswerQuestion(dspy.Signature):
     """
     user_message: str              = dspy.InputField(desc="The user's question")
     ws_context:   WorksheetContext = dspy.InputField(desc="Current worksheet state")
-    current_step: Segment          = dspy.InputField(desc="The step the user is asking about")
-    history:      list[dict]       = dspy.InputField(desc="Prior conversation turns (may be empty)")
+    current_step: StepSummary      = dspy.InputField(desc="Description and explanation of the step being asked about")
+    history:      list[dict]       = dspy.InputField(desc="Prior conversation turns [{q, a}] (may be empty)")
 
     result: AskAnswer = dspy.OutputField()
 
@@ -166,9 +206,8 @@ class AnswerQuestion(dspy.Signature):
 class ScaffoldRubric(dspy.Signature):
     """
     Generate a concise grading rubric for a spreadsheet task.
-    Hard requirements are must-have correctness criteria.
-    Soft requirements are nice-to-have quality criteria.
-    Generate 1-2 of each.
+    Hard requirements are must-have correctness criteria (1-2 items).
+    Soft requirements are nice-to-have quality criteria (1-2 items).
     """
     user_message: str              = dspy.InputField(desc="Description of the spreadsheet task")
     ws_context:   WorksheetContext = dspy.InputField(desc="Current worksheet state")
@@ -180,6 +219,7 @@ class VerifyRubric(dspy.Signature):
     """
     Evaluate whether the current worksheet satisfies each rubric requirement.
     Be precise about cell references and give one-sentence reasoning per item.
+    Cover every item in both hard_requirements and soft_requirements.
     """
     rubric:     Rubric           = dspy.InputField(desc="The rubric to evaluate against")
     ws_context: WorksheetContext = dspy.InputField(desc="Current worksheet state")
