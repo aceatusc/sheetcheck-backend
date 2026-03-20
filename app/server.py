@@ -74,6 +74,29 @@ def _warmup():
 threading.Thread(target=_warmup, daemon=True, name="dspy-warmup").start()
 
 
+# -- Stub message mapping -----------------------------------------------------
+#
+# Maps natural-language demo prompts (shown on demo buttons in the UI) to
+# their stub key. The legacy "stub:KEY" prefix still works as a fallback.
+
+STUB_MESSAGES: dict[str, str] = {
+    "create a monthly p&l dashboard with revenue, expenses, and growth %": "pnl",
+    "build a profit and loss dashboard":                                    "pnl",
+    "create a tax filing sheet with income sources and withholding status": "sales",
+    "build a tax plan for multiple income sources":                         "sales",
+    "create an inventory summary with low-stock alerts":                    "inventory",
+    "build a product inventory tracker with reorder alerts":                "inventory",
+}
+
+
+def _resolve_stub(message: str) -> str | None:
+    """Return stub key for a message, or None if not a stub trigger."""
+    msg = message.strip()
+    if msg.lower().startswith("stub:"):
+        return msg[5:].strip().lower()
+    return STUB_MESSAGES.get(msg.lower())
+
+
 # ── Decorators ────────────────────────────────────────────────────────────────
 
 def require_auth(f):
@@ -128,14 +151,14 @@ def code(body: dict):
     if not message:
         return jsonify({"error": "message is required"}), 400
 
-    if message.lower().startswith("stub:"):
-        key  = message[5:].strip().lower()
-        segs = STUBS.get(key)
+    stub_key = _resolve_stub(message)
+    if stub_key:
+        segs = STUBS.get(stub_key)
         if segs:
             return jsonify({"segments": segs})
-        return jsonify({"error": f"Unknown stub '{key}'. Valid: {list(STUBS.keys())}"}), 400
 
-    segments = generate_segments(message, context, rubric=rubric)
+    chat_history = body.get("chat_history", [])
+    segments = generate_segments(message, context, rubric=rubric, chat_history=chat_history)
     return jsonify({"segments": segments})
 
 
@@ -154,7 +177,8 @@ def ask(body: dict):
     if message.lower() == "test":
         return jsonify(STUB_ASK)
 
-    return jsonify(ask_question(message, context, step, history))
+    chat_history = body.get("chat_history", [])
+    return jsonify(ask_question(message, context, step, history, chat_history=chat_history))
 
 
 @addin.route("/edit", methods=["POST"])
@@ -170,7 +194,8 @@ def edit(body: dict):
     if message.lower() == "test":
         return jsonify({"segments": STUB_EDIT})
 
-    segments = edit_segments(message, context, original_segment, remaining_segments)
+    chat_history = body.get("chat_history", [])
+    segments = edit_segments(message, context, original_segment, remaining_segments, chat_history=chat_history)
     return jsonify({"segments": segments})
 
 
@@ -184,11 +209,12 @@ def rubric_scaffold(body: dict):
 
     if not message:
         return jsonify(STUB_RUBRIC)
-    if message.lower().startswith("stub:"):
-        key = message[5:].strip().lower()
-        return jsonify(STUB_RUBRICS.get(key, STUB_RUBRIC))
+    stub_key = _resolve_stub(message)
+    if stub_key:
+        return jsonify(STUB_RUBRICS.get(stub_key, STUB_RUBRIC))
 
-    return jsonify(scaffold_rubric(message, context))
+    chat_history = body.get("chat_history", [])
+    return jsonify(scaffold_rubric(message, context, chat_history=chat_history))
 
 
 @addin.route("/rubric/verify", methods=["POST"])

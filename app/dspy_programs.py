@@ -80,9 +80,35 @@ class Selection(BaseModel):
     formulas: Optional[list[list[Any]]] = None
 
 
+class CellStyle(BaseModel):
+    """Styling snapshot for a single cell or range."""
+    model_config = ConfigDict(extra="allow")
+    address:             Optional[str]  = None
+    fillColor:           Optional[str]  = None   # hex, e.g. "#1a1d27"
+    fontColor:           Optional[str]  = None
+    fontBold:            Optional[bool] = None
+    fontItalic:          Optional[bool] = None
+    fontSize:            Optional[float] = None
+    numberFormat:        Optional[str]  = None   # e.g. "$#,##0", "0.0%"
+    horizontalAlignment: Optional[str]  = None   # "Left" | "Center" | "Right"
+
+
+class ChartInfo(BaseModel):
+    """Summary of a chart object present on the sheet."""
+    model_config = ConfigDict(extra="allow")
+    name:       Optional[str]       = None   # chart object name
+    chartType:  Optional[str]       = None   # "Line", "ColumnClustered", etc.
+    dataRange:  Optional[str]       = None   # source data range address
+    title:      Optional[str]       = None
+
+
 class SheetData(BaseModel):
     model_config = ConfigDict(extra="allow")
-    usedRange: Optional[UsedRange] = None
+    usedRange: Optional[UsedRange]    = None
+    styles:    Optional[list[CellStyle]] = Field(default=None,
+        description="Sampled cell styles — one entry per distinct formatted region")
+    charts:    Optional[list[ChartInfo]] = Field(default=None,
+        description="Charts present on the active sheet")
 
 
 class WorksheetContext(BaseModel):
@@ -118,7 +144,8 @@ class Segment(BaseModel):
     edit_suggestions: list[str]              = Field(default_factory=list, description="2-3 short edit prompts")
     parameters:       list[SegmentParameter] = Field(default_factory=list, description="Tweakable constants in the code")
     code:             str                    = Field(description="await Excel.run(async (ctx) => { ... await ctx.sync(); });")
-
+    undo_code:        str                    = Field(default="")
+    manual_steps:     str                    = Field(default="", description=("Step-by-step manual instructions for doing this step in the Excel UI."))
 
 
 class SegmentList(BaseModel):
@@ -187,10 +214,11 @@ class GenerateSegments(dspy.Signature):
     - Include a clear explanation and 2-3 Q&A pairs
     - Include all tweakable constants as parameters[]
     """
-    user_message: str              = dspy.InputField(desc="What the user wants to do in the spreadsheet")
-    ws_context:   WorksheetContext = dspy.InputField(desc="Current worksheet state")
-    rubric_hint:  RubricHint       = dspy.InputField(desc="Optional rubric requirements to satisfy (may be empty)")
-    js_hint:      str              = dspy.InputField(desc="Known JS mistakes and fixes to avoid (may be empty)")
+    user_message:  str              = dspy.InputField(desc="What the user wants to do in the spreadsheet")
+    ws_context:    WorksheetContext = dspy.InputField(desc="Current worksheet state")
+    rubric_hint:   RubricHint       = dspy.InputField(desc="Optional rubric requirements to satisfy (may be empty)")
+    js_hint:       str              = dspy.InputField(desc="Known JS mistakes and fixes to avoid (may be empty)")
+    chat_history:  list[str]        = dspy.InputField(desc="Recent user messages for context (oldest first, may be empty)")
 
     result: SegmentList = dspy.OutputField()
 
@@ -213,6 +241,7 @@ class EditSegments(dspy.Signature):
     original_segment:   Segment          = dspy.InputField(desc="The segment to edit")
     remaining_segments: list[Segment]    = dspy.InputField(desc="Segments that follow the edited one (may be empty)")
     js_hint:            str              = dspy.InputField(desc="Known JS mistakes and fixes to avoid (may be empty)")
+    chat_history:       list[str]        = dspy.InputField(desc="Recent user messages for context (oldest first, may be empty)")
 
     result: SegmentList = dspy.OutputField()
 
@@ -222,10 +251,11 @@ class AnswerQuestion(dspy.Signature):
     Answer a follow-up question about a specific step in a spreadsheet
     automation plan. Be concise and suggest natural follow-up questions.
     """
-    user_message: str              = dspy.InputField(desc="The user's question")
-    ws_context:   WorksheetContext = dspy.InputField(desc="Current worksheet state")
-    current_step: StepSummary      = dspy.InputField(desc="Description and explanation of the step being asked about")
-    history:      list[dict]       = dspy.InputField(desc="Prior conversation turns [{q, a}] (may be empty)")
+    user_message:  str              = dspy.InputField(desc="The user's question")
+    ws_context:    WorksheetContext = dspy.InputField(desc="Current worksheet state")
+    current_step:  StepSummary      = dspy.InputField(desc="Description and explanation of the step being asked about")
+    history:       list[dict]       = dspy.InputField(desc="Prior conversation turns [{q, a}] (may be empty)")
+    chat_history:  list[str]        = dspy.InputField(desc="Recent user messages for context (oldest first, may be empty)")
 
     result: AskAnswer = dspy.OutputField()
 
@@ -236,8 +266,9 @@ class ScaffoldRubric(dspy.Signature):
     Hard requirements are must-have correctness criteria (1-2 items).
     Soft requirements are nice-to-have quality criteria (1-2 items).
     """
-    user_message: str              = dspy.InputField(desc="Description of the spreadsheet task")
-    ws_context:   WorksheetContext = dspy.InputField(desc="Current worksheet state")
+    user_message:  str              = dspy.InputField(desc="Description of the spreadsheet task")
+    ws_context:    WorksheetContext = dspy.InputField(desc="Current worksheet state")
+    chat_history:  list[str]        = dspy.InputField(desc="Recent user messages for context (oldest first, may be empty)")
 
     result: Rubric = dspy.OutputField()
 
