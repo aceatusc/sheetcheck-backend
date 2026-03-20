@@ -234,6 +234,47 @@ def rubric_verify(body: dict):
     return jsonify({"results": verify_rubric(rubric, context)})
 
 
+@addin.route("/interactions", methods=["POST"])
+@require_json
+def interactions(body: dict):
+    """
+    Receive a session interaction log from the front-end.
+    Accepts unauthenticated requests because sendBeacon cannot set custom
+    headers — the payload is non-sensitive telemetry only.
+    Written as NDJSON (one event per line) to logs/interactions/.
+    """
+    import json
+    from pathlib import Path
+
+    session_id    = body.get("session_id", "unknown")
+    session_start = body.get("session_start", "")
+    events        = body.get("events", [])
+
+    if not events:
+        return jsonify({"ok": True, "events": 0})
+
+    out_dir = Path(__file__).parent / "logs" / "interactions"
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    # One file per session: <start_date>_<session_id>.ndjson
+    date_slug = session_start[:10] if session_start else "unknown"
+    out_path  = out_dir / f"{date_slug}_{session_id}.ndjson"
+
+    with out_path.open("w", encoding="utf-8") as f:
+        # Header line with session metadata
+        f.write(json.dumps({
+            "session_id":    session_id,
+            "session_start": session_start,
+            "event_count":   len(events),
+        }) + "\n")
+        # One event per line
+        for ev in events:
+            f.write(json.dumps(ev) + "\n")
+
+    logger.info("[Interactions] session=%s  events=%d  -> %s", session_id, len(events), out_path.name)
+    return jsonify({"ok": True, "events": len(events)})
+
+
 @addin.route("/chat", methods=["POST"])
 @require_auth
 @require_json
