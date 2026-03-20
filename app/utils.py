@@ -109,6 +109,7 @@ def generate_segments(
     user_message: str,
     ws_context: dict,
     rubric: dict | None = None,
+    chat_history: list[str] | None = None,
 ) -> list[dict]:
     from js_validator import mistakes_prompt_hint
     from dspy_programs import RubricHint
@@ -126,6 +127,7 @@ def generate_segments(
         ws_context=_make_ws_context(ws_context),
         rubric_hint=rubric_hint,
         js_hint=mistakes_prompt_hint(),
+        chat_history=chat_history or [],
     )
     return _validate_and_dump_segments(result)
 
@@ -193,7 +195,11 @@ def scaffold_rubric(
 
 
 
-def verify_rubric(rubric: dict, ws_context: dict) -> list[dict]:
+def verify_rubric(
+    rubric: dict,
+    ws_context: dict,
+    chat_history: list[str] | None = None,
+) -> list[dict]:
     """
     Returns a list of VerifyResult dicts.
     server.py wraps this in {"results": [...]} to match what LLMClient.rubricVerify()
@@ -209,13 +215,19 @@ def verify_rubric(rubric: dict, ws_context: dict) -> list[dict]:
         "rubric_verify",
         rubric=rubric_model,
         ws_context=_make_ws_context(ws_context),
+        chat_history=chat_history or [],
     )
     return [r.model_dump() for r in result.results]
 
 
-def chat_response(user_message: str, ws_context: dict) -> str:
+def chat_response(
+    user_message: str,
+    ws_context: dict,
+    chat_history: list[str] | None = None,
+) -> str:
     return call_program(
         "chat",
         user_message=user_message,
         ws_context=_make_ws_context(ws_context),
+        chat_history=chat_history or [],
     )

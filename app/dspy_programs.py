@@ -279,16 +279,18 @@ class VerifyRubric(dspy.Signature):
     Be precise about cell references and give one-sentence reasoning per item.
     Cover every item in both hard_requirements and soft_requirements.
     """
-    rubric:     Rubric           = dspy.InputField(desc="The rubric to evaluate against")
-    ws_context: WorksheetContext = dspy.InputField(desc="Current worksheet state")
+    rubric:       Rubric           = dspy.InputField(desc="The rubric to evaluate against")
+    ws_context:   WorksheetContext = dspy.InputField(desc="Current worksheet state")
+    chat_history: list[str]        = dspy.InputField(desc="Recent user messages for context (oldest first, may be empty)")
 
     result: VerifyResultList = dspy.OutputField()
 
 
 class ChatResponse(dspy.Signature):
     """Answer a general Excel / spreadsheet question helpfully and concisely."""
-    user_message: str              = dspy.InputField(desc="User's question or request")
-    ws_context:   WorksheetContext = dspy.InputField(desc="Current worksheet state")
+    user_message:  str              = dspy.InputField(desc="User's question or request")
+    ws_context:    WorksheetContext = dspy.InputField(desc="Current worksheet state")
+    chat_history:  list[str]        = dspy.InputField(desc="Recent user messages for context (oldest first, may be empty)")
 
     response: str = dspy.OutputField(desc="Helpful, concise answer -- markdown OK")
 

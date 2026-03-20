@@ -228,7 +228,8 @@ def rubric_verify(body: dict):
     if not context.get("sheetData"):
         return jsonify({"results": STUB_VERIFY})
 
-    return jsonify({"results": verify_rubric(rubric, context)})
+    chat_history = body.get("chat_history", [])
+    return jsonify({"results": verify_rubric(rubric, context, chat_history=chat_history)})
 
 
 @addin.route("/interactions", methods=["POST"])
@@ -285,7 +286,8 @@ def chat(body: dict):
     if message.lower() == "test":
         return jsonify({"response": "[stub] The assistant is ready to help with your spreadsheet questions!"})
 
-    return jsonify({"response": chat_response(message, context)})
+    chat_history = body.get("chat_history", [])
+    return jsonify({"response": chat_response(message, context, chat_history=chat_history)})
 
 
 app.register_blueprint(addin)
