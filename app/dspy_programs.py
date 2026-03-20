@@ -39,7 +39,7 @@ logger = logging.getLogger(__name__)
 #   Gemini 3 Flash / 3.1 variants: 64,000 output tokens
 #   Mistral Small 2506 / Ministral: 131,072 output tokens
 MAX_TOKENS: dict[str, int] = {
-    "code":            32_000,   # 5-10 segments, each with code + qa + params
+    "code":            64_000,   # 5-10 segments, each with code + qa + params
     "edit":            32_000,   # same shape as code
     "ask":              2_000,   # short answer + 2 follow-up questions
     "rubric_scaffold":  1_000,   # 2-4 rubric items
