@@ -293,4 +293,6 @@ def chat(body: dict):
 app.register_blueprint(addin)
 
 if __name__ == "__main__":
+    # For local dev only. In production use:
+    #   uv run gunicorn -c gunicorn.conf.py server:app
     app.run(host="0.0.0.0", port=8883, debug=True)
