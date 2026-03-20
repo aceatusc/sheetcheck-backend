@@ -135,6 +135,7 @@ def edit_segments(
     ws_context: dict,
     original_segment: dict,
     remaining_segments: list[dict],
+    chat_history: list[str] | None = None,
 ) -> list[dict]:
     from js_validator import mistakes_prompt_hint
     from dspy_programs import Segment
@@ -146,6 +147,7 @@ def edit_segments(
         original_segment=Segment(**original_segment),
         remaining_segments=[Segment(**s) for s in remaining_segments],
         js_hint=mistakes_prompt_hint(),
+        chat_history=chat_history or [],
     )
     return _validate_and_dump_segments(result)
 
