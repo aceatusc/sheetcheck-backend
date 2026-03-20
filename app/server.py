@@ -1,125 +1,167 @@
 """
-server.py — SheetCheck API proxy
-Routes:
-  GET  /addin/health
-  POST /addin/code            — generate code segments from user task
-  POST /addin/ask             — follow-up Q&A about a specific step
-  POST /addin/edit            — modify a specific segment based on feedback
-  POST /addin/rubric/scaffold — generate initial rubric for a task
-  POST /addin/rubric/verify   — evaluate worksheet against rubric
-  POST /addin/chat            — general LLM chat proxy
+server.py -- SheetCheck API proxy
 """
+
+import logging
+import threading
+from functools import wraps
 
 from flask import Flask, Blueprint, jsonify, request
 from flask_cors import CORS
 
-from params import SHARED_SECRET, STUB_RUBRIC, STUB_ASK, STUB_EDIT, STUB_VERIFY
-from stubs import STUBS, STUB_META, STUB_RUBRICS, STUB_VERIFIES
-from utils import build_user_prompt, call_llm, parse_segments, parse_json
+from params import SHARED_SECRET, STUB_RUBRIC, STUB_ASK, STUB_EDIT, STUB_VERIFY, ENDPOINT_MODELS, Provider
+from params import ANTHROPIC_API_KEY, OPENAI_API_KEY, MISTRAL_API_KEY, GEMINI_API_KEY
+from stubs import STUBS, STUB_RUBRICS, STUB_VERIFIES
+from utils import (
+    generate_segments,
+    edit_segments,
+    ask_question,
+    scaffold_rubric,
+    verify_rubric,
+    chat_response,
+    _PROVIDER_PREFIX,
+    _PROVIDER_KEY,
+)
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 app   = Flask(__name__)
 CORS(app)
 addin = Blueprint("addin", __name__, url_prefix="/addin")
 
 
-# ── Auth helper ───────────────────────────────────────────────────────────────
+# -- Startup warm-up ----------------------------------------------------------
+#
+# On first request, several things are slow:
+#   1. Heavy imports (dspy, pydantic, anthropic SDK, etc.) loaded lazily
+#   2. dspy.LM() opening a connection and validating against the provider API
+#   3. dspy.Module / ChainOfThought objects being instantiated
+#
+# We pre-warm all of these in a background thread at startup so the first real
+# user request hits only the LLM round-trip latency, not initialization overhead.
+# The background thread runs after the Flask app is fully set up, so it does not
+# block startup or affect gunicorn worker forking.
 
-def _auth():
-    if request.headers.get("X-Addin-Secret","") != SHARED_SECRET:
-        return jsonify({"error":"Unauthorized"}), 401
-    return None
+def _warmup():
+    try:
+        logger.info("[Warmup] Pre-warming DSPy programs and LM clients...")
+        import dspy
+        from dspy_programs import get_lm, get_program
 
-def _body():
-    b = request.get_json(silent=True)
-    if not b:
-        return None, (jsonify({"error":"Invalid JSON body"}), 400)
-    return b, None
+        endpoints = list(ENDPOINT_MODELS.keys())
+        for endpoint in endpoints:
+            cfg    = ENDPOINT_MODELS[endpoint]
+            prefix = _PROVIDER_PREFIX[cfg.provider]
+            key    = _PROVIDER_KEY[cfg.provider]
+            # Cache the LM client (opens provider connection)
+            get_lm(prefix, cfg.model.value, key, endpoint)
+            # Cache the program instance (instantiates ChainOfThought)
+            get_program(endpoint)
+            logger.info("[Warmup]   %s -> %s/%s", endpoint, prefix, cfg.model.value)
+
+        # Also force-import the validator so esprima is ready
+        from js_validator import load_known_fixes, load_mistakes
+        load_known_fixes()
+        load_mistakes(limit=1)
+
+        logger.info("[Warmup] Done -- all programs and LM clients ready.")
+    except Exception as exc:
+        # Warmup failure is non-fatal -- requests will still work, just slower
+        # on the first call.
+        logger.warning("[Warmup] Failed (non-fatal): %s", exc)
+
+threading.Thread(target=_warmup, daemon=True, name="dspy-warmup").start()
+
+
+# ── Decorators ────────────────────────────────────────────────────────────────
+
+def require_auth(f):
+    @wraps(f)
+    def wrapper(*args, **kwargs):
+        if request.headers.get("X-Addin-Secret", "") != SHARED_SECRET:
+            return jsonify({"error": "Unauthorized"}), 401
+        return f(*args, **kwargs)
+    return wrapper
+
+
+def require_json(f):
+    @wraps(f)
+    def wrapper(*args, **kwargs):
+        body = request.get_json(silent=True)
+        if not body:
+            return jsonify({"error": "Invalid JSON body"}), 400
+        return f(body, *args, **kwargs)
+    return wrapper
+
+
+def handle_llm_errors(f):
+    @wraps(f)
+    def wrapper(*args, **kwargs):
+        try:
+            return f(*args, **kwargs)
+        except ValueError as exc:
+            logger.error("Validation / parse error: %s", exc)
+            return jsonify({"error": str(exc)}), 502
+        except Exception as exc:
+            logger.exception("Unexpected error in %s", f.__name__)
+            return jsonify({"error": str(exc)}), 502
+    return wrapper
 
 
 # ── Routes ────────────────────────────────────────────────────────────────────
 
 @addin.route("/health", methods=["GET"])
 def health():
-    return jsonify({"status":"ok"})
+    return jsonify({"status": "ok"})
 
 
 @addin.route("/code", methods=["POST"])
-def code():
-    if (e := _auth()): return e
-    body, err = _body();
-    if err: return err
+@require_auth
+@require_json
+@handle_llm_errors
+def code(body: dict):
+    message = body.get("message", "").strip()
+    context = body.get("context", {})
+    rubric  = body.get("rubric", None)
 
-    message  = body.get("message","").strip()
-    context  = body.get("context", {})
-    rubric   = body.get("rubric", None)   # optional rubric passed for context
     if not message:
-        return jsonify({"error":"message is required"}), 400
+        return jsonify({"error": "message is required"}), 400
 
-    # stub:KEY triggers a canned demo without hitting the LLM
     if message.lower().startswith("stub:"):
-        key = message[5:].strip().lower()
+        key  = message[5:].strip().lower()
         segs = STUBS.get(key)
         if segs:
             return jsonify({"segments": segs})
         return jsonify({"error": f"Unknown stub '{key}'. Valid: {list(STUBS.keys())}"}), 400
 
-    extra = None
-    if rubric:
-        hard = [r['label'] for r in rubric.get('hard_requirements', [])]
-        soft = [r['label'] for r in rubric.get('soft_requirements', [])]
-        extra = {
-            "requirements": {
-                "hard_must_satisfy": hard,
-                "soft_nice_to_have": soft,
-            }
-        }
-    prompt = build_user_prompt(message, context, extra)
-    try:
-        raw = call_llm("code", prompt)
-        segments = parse_segments(raw)
-    except Exception as exc:
-        print(raw)
-        print(str(exc))
-        return jsonify({"error": str(exc)}), 502
-
+    segments = generate_segments(message, context, rubric=rubric)
     return jsonify({"segments": segments})
 
 
 @addin.route("/ask", methods=["POST"])
-def ask():
-    if (e := _auth()): return e
-    body, err = _body();
-    if err: return err
+@require_auth
+@require_json
+@handle_llm_errors
+def ask(body: dict):
+    message = body.get("message", "").strip()
+    context = body.get("context", {})
+    step    = body.get("step", {})
+    history = body.get("history", [])
 
-    message  = body.get("message","").strip()
-    context  = body.get("context", {})
-    step     = body.get("step", {})
-    history  = body.get("history", [])
     if not message:
-        return jsonify({"error":"message is required"}), 400
-
+        return jsonify({"error": "message is required"}), 400
     if message.lower() == "test":
         return jsonify(STUB_ASK)
 
-    extra = {"current_step": step, "conversation_history": history}
-    prompt = build_user_prompt(message, context, extra)
-    try:
-        raw    = call_llm("ask", prompt)
-        result = parse_json(raw)
-    except Exception as exc:
-        print(raw)
-        print(str(exc))
-        return jsonify({"error": str(exc)}), 502
-
-    return jsonify(result)
+    return jsonify(ask_question(message, context, step, history))
 
 
 @addin.route("/edit", methods=["POST"])
-def edit():
-    if (e := _auth()): return e
-    body, err = _body();
-    if err: return err
-
+@require_auth
+@require_json
+@handle_llm_errors
+def edit(body: dict):
     message            = body.get("message", "").strip()
     context            = body.get("context", {})
     original_segment   = body.get("segment", {})
@@ -128,33 +170,16 @@ def edit():
     if message.lower() == "test":
         return jsonify({"segments": STUB_EDIT})
 
-    extra = {
-        "original_segment":   original_segment,
-        "remaining_segments": remaining_segments,
-        "user_feedback":      message,
-    }
-    prompt = build_user_prompt(
-        message or "Apply user feedback to this segment and update the remainder.",
-        context, extra
-    )
-    try:
-        raw      = call_llm("edit", prompt)
-        segments = parse_segments(raw)
-    except Exception as exc:
-        print(raw)
-        print(str(exc))
-        return jsonify({"error": str(exc), "raw": raw[:300]}), 502
-
+    segments = edit_segments(message, context, original_segment, remaining_segments)
     return jsonify({"segments": segments})
 
 
 @addin.route("/rubric/scaffold", methods=["POST"])
-def rubric_scaffold():
-    if (e := _auth()): return e
-    body, err = _body();
-    if err: return err
-
-    message = body.get("message","").strip()
+@require_auth
+@require_json
+@handle_llm_errors
+def rubric_scaffold(body: dict):
+    message = body.get("message", "").strip()
     context = body.get("context", {})
 
     if not message:
@@ -163,73 +188,43 @@ def rubric_scaffold():
         key = message[5:].strip().lower()
         return jsonify(STUB_RUBRICS.get(key, STUB_RUBRIC))
 
-    prompt = build_user_prompt(message, context)
-    try:
-        raw    = call_llm("rubric_scaffold", prompt)
-        rubric = parse_json(raw)
-    except Exception as exc:
-        print(raw)
-        print(str(exc))
-        return jsonify({"error": str(exc)}), 502
-
-    return jsonify(rubric)
+    return jsonify(scaffold_rubric(message, context))
 
 
 @addin.route("/rubric/verify", methods=["POST"])
-def rubric_verify():
-    if (e := _auth()): return e
-    body, err = _body();
-    if err: return err
-
+@require_auth
+@require_json
+@handle_llm_errors
+def rubric_verify(body: dict):
     rubric  = body.get("rubric", {})
     context = body.get("context", {})
 
-    # Route to stub verify if rubric carries a stub_key
     stub_key = rubric.get("stub_key", "")
     if stub_key and stub_key in STUB_VERIFIES:
         return jsonify({"results": STUB_VERIFIES[stub_key]})
-    # Fallback stub if no sheet data provided
     if not context.get("sheetData"):
         return jsonify({"results": STUB_VERIFY})
 
-    extra = {"rubric": rubric}
-    prompt = build_user_prompt("Verify the worksheet satisfies each rubric item.", context, extra)
-    try:
-        raw    = call_llm("rubric_verify", prompt)
-        result = parse_json(raw)
-    except Exception as exc:
-        print(raw)
-        print(str(exc))
-        return jsonify({"error": str(exc)}), 502
-
-    return jsonify({"results": result})
+    return jsonify({"results": verify_rubric(rubric, context)})
 
 
 @addin.route("/chat", methods=["POST"])
-def chat():
-    if (e := _auth()): return e
-    body, err = _body();
-    if err: return err
-
-    message = body.get("message","").strip()
+@require_auth
+@require_json
+@handle_llm_errors
+def chat(body: dict):
+    message = body.get("message", "").strip()
     context = body.get("context", {})
-    if not message:
-        return jsonify({"error":"message is required"}), 400
 
+    if not message:
+        return jsonify({"error": "message is required"}), 400
     if message.lower() == "test":
         return jsonify({"response": "[stub] The assistant is ready to help with your spreadsheet questions!"})
 
-    prompt = build_user_prompt(message, context)
-    try:
-        raw = call_llm("chat", prompt)
-    except Exception as exc:
-        print(raw)
-        print(str(exc))
-        return jsonify({"error": str(exc)}), 502
-
-    return jsonify({"response": raw})
+    return jsonify({"response": chat_response(message, context)})
 
 
 app.register_blueprint(addin)
+
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8883, debug=True)

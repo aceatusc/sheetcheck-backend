@@ -1,88 +1,211 @@
-"""Server utilities — LLM call dispatch."""
+"""
+utils.py -- LLM call dispatch via DSPy programs.
+
+All wire-format decisions are driven by the actual add-in JS:
+  - WorksheetContext matches worksheetContext.js gather() output exactly
+  - ask() receives step as {description, explanation} (StepSummary), not a full Segment
+  - scaffold_rubric() returns the Rubric dict directly (not nested)
+  - verify_rubric() returns a list of VerifyResult dicts (server wraps in {"results": [...]})
+
+Threading: call_program() uses dspy.context(lm=...) -- a thread-local context manager --
+instead of dspy.configure(), which is locked to the thread that first calls it and would
+raise RuntimeError on every subsequent Flask request thread.
+"""
+
+from __future__ import annotations
 
 import json
-import re
+import logging
+from typing import Any
 
-from params import Provider, ENDPOINT_MODELS, SYSTEM_PROMPTS
+from params import Provider, ENDPOINT_MODELS
 from params import ANTHROPIC_API_KEY, OPENAI_API_KEY, MISTRAL_API_KEY, GEMINI_API_KEY
 
+logger = logging.getLogger(__name__)
 
-def build_user_prompt(user_message: str, ws_context: dict, extra: dict = None) -> str:
-    ctx_block = json.dumps(ws_context, indent=2) if ws_context else "{}"
-    parts = [f"Worksheet context:\n```json\n{ctx_block}\n```\n\nUser request: {user_message}"]
-    if extra:
-        parts.append(f"\nExtra context:\n```json\n{json.dumps(extra, indent=2)}\n```")
-    return "\n".join(parts)
+_PROVIDER_PREFIX: dict[Provider, str] = {
+    Provider.ANTHROPIC: "anthropic",
+    Provider.OPENAI:    "openai",
+    Provider.MISTRAL:   "mistral",
+    Provider.GOOGLE:    "gemini",
+}
 
-
-def call_llm(endpoint: str, user_prompt: str) -> str:
-    cfg = ENDPOINT_MODELS[endpoint]
-    system = SYSTEM_PROMPTS[endpoint]
-    if cfg.provider == Provider.ANTHROPIC:
-        return _call_anthropic(system, user_prompt, cfg.model)
-    elif cfg.provider == Provider.OPENAI:
-        return _call_openai(system, user_prompt, cfg.model)
-    elif cfg.provider == Provider.MISTRAL:
-        return _call_mistralai(system, user_prompt, cfg.model)
-    elif cfg.provider == Provider.GOOGLE:
-        return _call_google(system, user_prompt, cfg.model)
-    else:
-        raise ValueError(f"Unknown provider: {cfg.provider}")
+_PROVIDER_KEY: dict[Provider, str] = {
+    Provider.ANTHROPIC: ANTHROPIC_API_KEY,
+    Provider.OPENAI:    OPENAI_API_KEY,
+    Provider.MISTRAL:   MISTRAL_API_KEY,
+    Provider.GOOGLE:    GEMINI_API_KEY,
+}
 
 
-def _call_anthropic(system: str, user_prompt: str, model: str) -> str:
-    import anthropic
-    client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
-    msg = client.messages.create(model=model, max_tokens=8096, system=system,
-                                  messages=[{"role":"user","content":user_prompt}])
-    return msg.content[0].text
+def call_program(endpoint: str, **kwargs) -> Any:
+    """
+    Run the DSPy program for `endpoint` using a thread-local LM context.
+
+    Uses dspy.context(lm=...) instead of dspy.configure() so each Flask
+    request thread can independently set its LM without racing on global state.
+    Every call is logged via memor (llm_logger.py) for reproducibility.
+    """
+    import dspy
+    from dspy_programs import get_lm, get_program
+    from llm_logger import log_call
+
+    cfg    = ENDPOINT_MODELS[endpoint]
+    prefix = _PROVIDER_PREFIX[cfg.provider]
+    key    = _PROVIDER_KEY[cfg.provider]
+    lm     = get_lm(prefix, cfg.model.value, key, endpoint)
+    model  = cfg.model.value
+
+    with log_call(endpoint, model=model) as call_log:
+        # Log a compact summary of the inputs as the prompt record
+        prompt_summary = {k: (str(v)[:500] if not isinstance(v, str) else v[:500])
+                          for k, v in kwargs.items()}
+        call_log.set_prompt(json.dumps(prompt_summary, indent=2, default=str))
+
+        with dspy.context(lm=lm):
+            result = get_program(endpoint)(**kwargs)
+
+        # Log a compact summary of the output as the response record
+        call_log.set_response(str(result))
+
+    return result
 
 
-def _call_openai(system: str, user_prompt: str, model: str) -> str:
-    from openai import OpenAI
-    client = OpenAI(api_key=OPENAI_API_KEY)
-    r = client.chat.completions.create(model=model, max_tokens=8096,
-        messages=[{"role":"system","content":system},{"role":"user","content":user_prompt}])
-    return r.choices[0].message.content
+def _make_ws_context(ws_context: dict):
+    """
+    Construct a WorksheetContext from the raw dict the add-in sends.
+    gather() in worksheetContext.js returns:
+      { selection, sheetData: { usedRange: { address, values } }, namedRanges, sheetNames }
+    extra='allow' on the model means unknown keys are preserved safely.
+    """
+    from dspy_programs import WorksheetContext
+    return WorksheetContext(**ws_context) if ws_context else WorksheetContext()
 
 
-def _call_mistralai(system: str, user_prompt: str, model: str) -> str:
-    from mistralai import Mistral
-    client = Mistral(api_key=MISTRAL_API_KEY)
-    r = client.chat.complete(model=model,
-        messages=[{"role":"system","content":system},{"role":"user","content":user_prompt}])
-    return r.choices[0].message.content
+def _validate_and_dump_segments(segment_list) -> list[dict]:
+    """Run JS validation on each Segment, return plain dicts for JSON serialisation."""
+    from js_validator import validate_js
+
+    failures: list[str] = []
+    dicts: list[dict] = []
+
+    for seg in segment_list.segments:
+        vr = validate_js(seg.code, segment_id=seg.id)
+        if not vr.valid:
+            failures.append(f"  [{seg.id}] {'; '.join(vr.errors)}")
+        elif vr.warnings:
+            logger.warning("[%s] JS warnings: %s", seg.id, "; ".join(vr.warnings))
+        dicts.append(seg.model_dump())
+
+    if failures:
+        raise ValueError("JS validation failed for segments:\n" + "\n".join(failures))
+
+    return dicts
 
 
-def _call_google(system: str, user_prompt: str, model: str) -> str:
-    from google import genai
-    from google.genai import types
-    client = genai.Client(api_key=GEMINI_API_KEY)
-    chat = client.chats.create(model=model,
-        config=types.GenerateContentConfig(system_instruction=system))
-    return chat.send_message(user_prompt).text
+# -- Endpoint wrappers --------------------------------------------------------
+
+def generate_segments(
+    user_message: str,
+    ws_context: dict,
+    rubric: dict | None = None,
+) -> list[dict]:
+    from js_validator import mistakes_prompt_hint
+    from dspy_programs import RubricHint
+
+    rubric_hint = RubricHint()
+    if rubric:
+        rubric_hint = RubricHint(
+            hard_must_satisfy=[r["label"] for r in rubric.get("hard_requirements", [])],
+            soft_nice_to_have=[r["label"] for r in rubric.get("soft_requirements", [])],
+        )
+
+    result = call_program(
+        "code",
+        user_message=user_message,
+        ws_context=_make_ws_context(ws_context),
+        rubric_hint=rubric_hint,
+        js_hint=mistakes_prompt_hint(),
+    )
+    return _validate_and_dump_segments(result)
 
 
-def parse_json(raw_text: str):
-    cleaned = re.sub(r"^```(?:json)?\s*", "", raw_text.strip(), flags=re.IGNORECASE)
-    cleaned = re.sub(r"\s*```$", "", cleaned.strip())
-    return json.loads(cleaned)
+def edit_segments(
+    user_message: str,
+    ws_context: dict,
+    original_segment: dict,
+    remaining_segments: list[dict],
+) -> list[dict]:
+    from js_validator import mistakes_prompt_hint
+    from dspy_programs import Segment
+
+    result = call_program(
+        "edit",
+        user_message=user_message or "Apply user feedback to this segment and update the remainder.",
+        ws_context=_make_ws_context(ws_context),
+        original_segment=Segment(**original_segment),
+        remaining_segments=[Segment(**s) for s in remaining_segments],
+        js_hint=mistakes_prompt_hint(),
+    )
+    return _validate_and_dump_segments(result)
 
 
-def parse_segments(raw_text: str) -> list:
-    segments = parse_json(raw_text)
-    if not isinstance(segments, list):
-        raise ValueError("LLM response is not a JSON array")
-    required = {"id","description","sheet_context","explanation","code"}
-    for i, seg in enumerate(segments):
-        missing = required - seg.keys()
-        if missing:
-            raise ValueError(f"Segment {i} missing fields: {missing}")
-        seg.setdefault("predecessors", [])
-        seg.setdefault("affordances", [])
-        seg.setdefault("alternatives", [])
-        seg.setdefault("qa_pairs", [])
-        seg.setdefault("edit_suggestions", [])
-        seg.setdefault("parameters", [])
-        seg.setdefault("undo_code", "")
-    return segments
+def ask_question(
+    user_message: str,
+    ws_context: dict,
+    step: dict,
+    history: list,
+) -> dict:
+    """
+    step arrives as { description, explanation } from stepNavigator._onAskSend().
+    We use StepSummary (not full Segment) so the model isn't asked to reconstruct
+    fields it was never given.
+    """
+    from dspy_programs import StepSummary
+
+    result = call_program(
+        "ask",
+        user_message=user_message,
+        ws_context=_make_ws_context(ws_context),
+        current_step=StepSummary(**step) if step else StepSummary(),
+        history=history,
+    )
+    return result.model_dump()
+
+
+def scaffold_rubric(user_message: str, ws_context: dict) -> dict:
+    """Returns the rubric dict directly — matches what rubricManager.setRubric() expects."""
+    result = call_program(
+        "rubric_scaffold",
+        user_message=user_message,
+        ws_context=_make_ws_context(ws_context),
+    )
+    return result.model_dump()
+
+
+def verify_rubric(rubric: dict, ws_context: dict) -> list[dict]:
+    """
+    Returns a list of VerifyResult dicts.
+    server.py wraps this in {"results": [...]} to match what LLMClient.rubricVerify()
+    destructures as res.results in rubricManager.showVerifyResults().
+    """
+    from dspy_programs import Rubric, RubricItem
+
+    rubric_model = Rubric(
+        hard_requirements=[RubricItem(**r) for r in rubric.get("hard_requirements", [])],
+        soft_requirements=[RubricItem(**r) for r in rubric.get("soft_requirements", [])],
+    )
+    result = call_program(
+        "rubric_verify",
+        rubric=rubric_model,
+        ws_context=_make_ws_context(ws_context),
+    )
+    return [r.model_dump() for r in result.results]
+
+
+def chat_response(user_message: str, ws_context: dict) -> str:
+    return call_program(
+        "chat",
+        user_message=user_message,
+        ws_context=_make_ws_context(ws_context),
+    )
