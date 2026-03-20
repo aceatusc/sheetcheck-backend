@@ -80,12 +80,9 @@ threading.Thread(target=_warmup, daemon=True, name="dspy-warmup").start()
 # their stub key. The legacy "stub:KEY" prefix still works as a fallback.
 
 STUB_MESSAGES: dict[str, str] = {
-    "create a monthly p&l dashboard with revenue, expenses, and growth %": "pnl",
-    "build a profit and loss dashboard":                                    "pnl",
-    "create a tax filing sheet with income sources and withholding status": "sales",
-    "build a tax plan for multiple income sources":                         "sales",
-    "create an inventory summary with low-stock alerts":                    "inventory",
-    "build a product inventory tracker with reorder alerts":                "inventory",
+    "build a profit and loss dashboard":        "pnl",
+    "build a tax plan":                         "sales",
+    "build an inventory summary":               "inventory",
 }
 
 
