@@ -66,7 +66,7 @@ def call_program(endpoint: str, **kwargs) -> Any:
             result = get_program(endpoint)(**kwargs)
 
         # Log a compact summary of the output as the response record
-        call_log.set_response(str(result))
+        call_log.set_response(str(result)[:2000])
 
     return result
 
@@ -155,6 +155,7 @@ def ask_question(
     ws_context: dict,
     step: dict,
     history: list,
+    chat_history: list[str] | None = None,
 ) -> dict:
     """
     step arrives as { description, explanation } from stepNavigator._onAskSend().
@@ -169,18 +170,25 @@ def ask_question(
         ws_context=_make_ws_context(ws_context),
         current_step=StepSummary(**step) if step else StepSummary(),
         history=history,
+        chat_history=chat_history or [],
     )
     return result.model_dump()
 
 
-def scaffold_rubric(user_message: str, ws_context: dict) -> dict:
-    """Returns the rubric dict directly — matches what rubricManager.setRubric() expects."""
+def scaffold_rubric(
+    user_message: str,
+    ws_context: dict,
+    chat_history: list[str] | None = None,
+) -> dict:
+    """Returns the rubric dict directly -- matches what rubricManager.setRubric() expects."""
     result = call_program(
         "rubric_scaffold",
         user_message=user_message,
         ws_context=_make_ws_context(ws_context),
+        chat_history=chat_history or [],
     )
     return result.model_dump()
+
 
 
 def verify_rubric(rubric: dict, ws_context: dict) -> list[dict]:
