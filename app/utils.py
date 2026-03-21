@@ -66,7 +66,7 @@ def call_program(endpoint: str, **kwargs) -> Any:
             result = get_program(endpoint)(**kwargs)
 
         # Log a compact summary of the output as the response record
-        call_log.set_response(str(result)[:2000])
+        call_log.set_response(str(result))
 
     return result
 
