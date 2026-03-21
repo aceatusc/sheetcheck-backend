@@ -32,7 +32,6 @@ class Model(str, Enum):
     GEMINI_2_5 = "gemini-2.5-flash"
     GEMINI_3_FLASH = "gemini-3-flash-preview"
     GEMINI_3_1_FLASH_LITE = "gemini-3.1-flash-lite-preview"
-    GEMINI_3_1_PRO = "gemini-3.1-pro-preview"
 
 # Per-endpoint config: each API can use a different provider/model
 class EndpointConfig:

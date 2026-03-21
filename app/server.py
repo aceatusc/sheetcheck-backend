@@ -74,6 +74,26 @@ def _warmup():
 threading.Thread(target=_warmup, daemon=True, name="dspy-warmup").start()
 
 
+# -- Stub message mapping -----------------------------------------------------
+#
+# Maps natural-language demo prompts (shown on demo buttons in the UI) to
+# their stub key. The legacy "stub:KEY" prefix still works as a fallback.
+
+STUB_MESSAGES: dict[str, str] = {
+    "build a profit and loss dashboard":        "pnl",
+    "build a tax plan":                         "sales",
+    "build an inventory summary":               "inventory",
+}
+
+
+def _resolve_stub(message: str) -> str | None:
+    """Return stub key for a message, or None if not a stub trigger."""
+    msg = message.strip()
+    if msg.lower().startswith("stub:"):
+        return msg[5:].strip().lower()
+    return STUB_MESSAGES.get(msg.lower())
+
+
 # ── Decorators ────────────────────────────────────────────────────────────────
 
 def require_auth(f):
@@ -128,14 +148,14 @@ def code(body: dict):
     if not message:
         return jsonify({"error": "message is required"}), 400
 
-    if message.lower().startswith("stub:"):
-        key  = message[5:].strip().lower()
-        segs = STUBS.get(key)
+    stub_key = _resolve_stub(message)
+    if stub_key:
+        segs = STUBS.get(stub_key)
         if segs:
             return jsonify({"segments": segs})
-        return jsonify({"error": f"Unknown stub '{key}'. Valid: {list(STUBS.keys())}"}), 400
 
-    segments = generate_segments(message, context, rubric=rubric)
+    chat_history = body.get("chat_history", [])
+    segments = generate_segments(message, context, rubric=rubric, chat_history=chat_history)
     return jsonify({"segments": segments})
 
 
@@ -154,7 +174,8 @@ def ask(body: dict):
     if message.lower() == "test":
         return jsonify(STUB_ASK)
 
-    return jsonify(ask_question(message, context, step, history))
+    chat_history = body.get("chat_history", [])
+    return jsonify(ask_question(message, context, step, history, chat_history=chat_history))
 
 
 @addin.route("/edit", methods=["POST"])
@@ -170,7 +191,8 @@ def edit(body: dict):
     if message.lower() == "test":
         return jsonify({"segments": STUB_EDIT})
 
-    segments = edit_segments(message, context, original_segment, remaining_segments)
+    chat_history = body.get("chat_history", [])
+    segments = edit_segments(message, context, original_segment, remaining_segments, chat_history=chat_history)
     return jsonify({"segments": segments})
 
 
@@ -184,11 +206,12 @@ def rubric_scaffold(body: dict):
 
     if not message:
         return jsonify(STUB_RUBRIC)
-    if message.lower().startswith("stub:"):
-        key = message[5:].strip().lower()
-        return jsonify(STUB_RUBRICS.get(key, STUB_RUBRIC))
+    stub_key = _resolve_stub(message)
+    if stub_key:
+        return jsonify(STUB_RUBRICS.get(stub_key, STUB_RUBRIC))
 
-    return jsonify(scaffold_rubric(message, context))
+    chat_history = body.get("chat_history", [])
+    return jsonify(scaffold_rubric(message, context, chat_history=chat_history))
 
 
 @addin.route("/rubric/verify", methods=["POST"])
@@ -205,7 +228,49 @@ def rubric_verify(body: dict):
     if not context.get("sheetData"):
         return jsonify({"results": STUB_VERIFY})
 
-    return jsonify({"results": verify_rubric(rubric, context)})
+    chat_history = body.get("chat_history", [])
+    return jsonify({"results": verify_rubric(rubric, context, chat_history=chat_history)})
+
+
+@addin.route("/interactions", methods=["POST"])
+@require_json
+def interactions(body: dict):
+    """
+    Receive a session interaction log from the front-end.
+    Accepts unauthenticated requests because sendBeacon cannot set custom
+    headers — the payload is non-sensitive telemetry only.
+    Written as NDJSON (one event per line) to logs/interactions/.
+    """
+    import json
+    from pathlib import Path
+
+    session_id    = body.get("session_id", "unknown")
+    session_start = body.get("session_start", "")
+    events        = body.get("events", [])
+
+    if not events:
+        return jsonify({"ok": True, "events": 0})
+
+    out_dir = Path(__file__).parent / "logs" / "interactions"
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    # One file per session: <start_date>_<session_id>.ndjson
+    date_slug = session_start[:10] if session_start else "unknown"
+    out_path  = out_dir / f"{date_slug}_{session_id}.ndjson"
+
+    with out_path.open("w", encoding="utf-8") as f:
+        # Header line with session metadata
+        f.write(json.dumps({
+            "session_id":    session_id,
+            "session_start": session_start,
+            "event_count":   len(events),
+        }) + "\n")
+        # One event per line
+        for ev in events:
+            f.write(json.dumps(ev) + "\n")
+
+    logger.info("[Interactions] session=%s  events=%d  -> %s", session_id, len(events), out_path.name)
+    return jsonify({"ok": True, "events": len(events)})
 
 
 @addin.route("/chat", methods=["POST"])
@@ -221,10 +286,13 @@ def chat(body: dict):
     if message.lower() == "test":
         return jsonify({"response": "[stub] The assistant is ready to help with your spreadsheet questions!"})
 
-    return jsonify({"response": chat_response(message, context)})
+    chat_history = body.get("chat_history", [])
+    return jsonify({"response": chat_response(message, context, chat_history=chat_history)})
 
 
 app.register_blueprint(addin)
 
 if __name__ == "__main__":
+    # For local dev only. In production use:
+    #   cd app & uv run gunicorn -c ../gunicorn.conf.py server:app
     app.run(host="0.0.0.0", port=8883, debug=True)

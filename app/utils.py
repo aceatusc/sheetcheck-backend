@@ -109,6 +109,7 @@ def generate_segments(
     user_message: str,
     ws_context: dict,
     rubric: dict | None = None,
+    chat_history: list[str] | None = None,
 ) -> list[dict]:
     from js_validator import mistakes_prompt_hint
     from dspy_programs import RubricHint
@@ -126,6 +127,7 @@ def generate_segments(
         ws_context=_make_ws_context(ws_context),
         rubric_hint=rubric_hint,
         js_hint=mistakes_prompt_hint(),
+        chat_history=chat_history or [],
     )
     return _validate_and_dump_segments(result)
 
@@ -135,6 +137,7 @@ def edit_segments(
     ws_context: dict,
     original_segment: dict,
     remaining_segments: list[dict],
+    chat_history: list[str] | None = None,
 ) -> list[dict]:
     from js_validator import mistakes_prompt_hint
     from dspy_programs import Segment
@@ -146,6 +149,7 @@ def edit_segments(
         original_segment=Segment(**original_segment),
         remaining_segments=[Segment(**s) for s in remaining_segments],
         js_hint=mistakes_prompt_hint(),
+        chat_history=chat_history or [],
     )
     return _validate_and_dump_segments(result)
 
@@ -155,6 +159,7 @@ def ask_question(
     ws_context: dict,
     step: dict,
     history: list,
+    chat_history: list[str] | None = None,
 ) -> dict:
     """
     step arrives as { description, explanation } from stepNavigator._onAskSend().
@@ -169,21 +174,32 @@ def ask_question(
         ws_context=_make_ws_context(ws_context),
         current_step=StepSummary(**step) if step else StepSummary(),
         history=history,
+        chat_history=chat_history or [],
     )
     return result.model_dump()
 
 
-def scaffold_rubric(user_message: str, ws_context: dict) -> dict:
-    """Returns the rubric dict directly — matches what rubricManager.setRubric() expects."""
+def scaffold_rubric(
+    user_message: str,
+    ws_context: dict,
+    chat_history: list[str] | None = None,
+) -> dict:
+    """Returns the rubric dict directly -- matches what rubricManager.setRubric() expects."""
     result = call_program(
         "rubric_scaffold",
         user_message=user_message,
         ws_context=_make_ws_context(ws_context),
+        chat_history=chat_history or [],
     )
     return result.model_dump()
 
 
-def verify_rubric(rubric: dict, ws_context: dict) -> list[dict]:
+
+def verify_rubric(
+    rubric: dict,
+    ws_context: dict,
+    chat_history: list[str] | None = None,
+) -> list[dict]:
     """
     Returns a list of VerifyResult dicts.
     server.py wraps this in {"results": [...]} to match what LLMClient.rubricVerify()
@@ -199,13 +215,19 @@ def verify_rubric(rubric: dict, ws_context: dict) -> list[dict]:
         "rubric_verify",
         rubric=rubric_model,
         ws_context=_make_ws_context(ws_context),
+        chat_history=chat_history or [],
     )
     return [r.model_dump() for r in result.results]
 
 
-def chat_response(user_message: str, ws_context: dict) -> str:
+def chat_response(
+    user_message: str,
+    ws_context: dict,
+    chat_history: list[str] | None = None,
+) -> str:
     return call_program(
         "chat",
         user_message=user_message,
         ws_context=_make_ws_context(ws_context),
+        chat_history=chat_history or [],
     )
