@@ -166,28 +166,42 @@ class AskAnswer(BaseModel):
     follow_up_questions: list[str] = Field(description="2 short suggested follow-up questions")
 
 
-# -- Rubric -------------------------------------------------------------------
+# -- Aspects (replaces Rubric) ------------------------------------------------
+#
+# A flat list of "aspects" — important dimensions the user should check.
+# No hard/soft distinction. Used by the standalone Verify panel.
 
-class RubricItem(BaseModel):
-    id:      str  = Field(description="Requirement ID, e.g. 'h1' or 's2'")
-    label:   str  = Field(description="Human-readable requirement text")
-    checked: bool = Field(default=False)
+class Aspect(BaseModel):
+    id:    str = Field(description="Unique aspect ID, e.g. 'a1', 'a2'")
+    label: str = Field(description="Human-readable aspect description (1-2 sentences)")
 
 
-class Rubric(BaseModel):
-    hard_requirements: list[RubricItem] = Field(description="Must-have correctness criteria (1-2 items)")
-    soft_requirements: list[RubricItem] = Field(description="Nice-to-have quality criteria (1-2 items)")
+class AspectList(BaseModel):
+    aspects: list[Aspect] = Field(description="3-6 important aspects to review")
 
 
 class VerifyResult(BaseModel):
-    id:         str       = Field(description="Rubric item ID")
-    met:        bool      = Field(description="Whether the worksheet satisfies this requirement")
+    id:         str       = Field(description="Aspect ID")
+    met:        bool      = Field(description="Whether the worksheet satisfies this aspect")
     reasoning:  str       = Field(description="One sentence explanation")
     references: list[str] = Field(description="Supporting cell ranges, e.g. ['A1:E1']")
 
 
 class VerifyResultList(BaseModel):
-    results: list[VerifyResult] = Field(description="One entry per rubric item (hard and soft)")
+    results: list[VerifyResult] = Field(description="One entry per aspect")
+
+
+# Kept for backward compat with /code rubric_hint (no longer shown as gate,
+# but still passed through so the LLM can be aware of aspects if present)
+class RubricItem(BaseModel):
+    id:      str  = Field(description="Aspect ID")
+    label:   str  = Field(description="Human-readable aspect text")
+    checked: bool = Field(default=False)
+
+
+class Rubric(BaseModel):
+    hard_requirements: list[RubricItem] = Field(default_factory=list)
+    soft_requirements: list[RubricItem] = Field(default_factory=list)
 
 
 class RubricHint(BaseModel):
@@ -260,26 +274,31 @@ class AnswerQuestion(dspy.Signature):
     result: AskAnswer = dspy.OutputField()
 
 
-class ScaffoldRubric(dspy.Signature):
+class ScaffoldAspects(dspy.Signature):
     """
-    Generate a concise grading rubric for a spreadsheet task.
-    Hard requirements are must-have correctness criteria (1-2 items).
-    Soft requirements are nice-to-have quality criteria (1-2 items).
+    Given the user's chat history and current worksheet state, identify 3-6
+    *important aspects* the user should verify about the task.
+
+    Aspects are thought-provoking dimensions that help the user overcome blind spots and hidden assumptions.
+    Write each as a concise, specific, actionable question or check
+    (e.g. "Are column headers consistent with the existing sheet naming convention?").
+    Focus on things the user might not have explicitly mentioned but that matter
+    for the task (unknown unknowns, common spreadsheet agents pitfalls, data integrity).
     """
-    user_message:  str              = dspy.InputField(desc="Description of the spreadsheet task")
-    ws_context:    WorksheetContext = dspy.InputField(desc="Current worksheet state")
+    user_message:  str              = dspy.InputField(desc="The user's original task description")
+    ws_context:    WorksheetContext = dspy.InputField(desc="Current full worksheet state")
     chat_history:  list[str]        = dspy.InputField(desc="Recent user messages for context (oldest first, may be empty)")
 
-    result: Rubric = dspy.OutputField()
+    result: AspectList = dspy.OutputField()
 
 
-class VerifyRubric(dspy.Signature):
+class VerifyAspects(dspy.Signature):
     """
-    Evaluate whether the current worksheet satisfies each rubric requirement.
+    Evaluate whether the current worksheet satisfies each aspect.
     Be precise about cell references and give one-sentence reasoning per item.
-    Cover every item in both hard_requirements and soft_requirements.
+    Cover every aspect in the list.
     """
-    rubric:       Rubric           = dspy.InputField(desc="The rubric to evaluate against")
+    aspects:      AspectList       = dspy.InputField(desc="The aspects to evaluate against")
     ws_context:   WorksheetContext = dspy.InputField(desc="Current worksheet state")
     chat_history: list[str]        = dspy.InputField(desc="Recent user messages for context (oldest first, may be empty)")
 
@@ -321,17 +340,17 @@ class AskProgram(dspy.Module):
         return self.predict(**kwargs).result
 
 
-class RubricScaffoldProgram(dspy.Module):
+class AspectScaffoldProgram(dspy.Module):
     def __init__(self):
-        self.predict = dspy.ChainOfThought(ScaffoldRubric)
+        self.predict = dspy.ChainOfThought(ScaffoldAspects)
 
-    def forward(self, **kwargs) -> Rubric:
+    def forward(self, **kwargs) -> AspectList:
         return self.predict(**kwargs).result
 
 
-class RubricVerifyProgram(dspy.Module):
+class AspectVerifyProgram(dspy.Module):
     def __init__(self):
-        self.predict = dspy.ChainOfThought(VerifyRubric)
+        self.predict = dspy.ChainOfThought(VerifyAspects)
 
     def forward(self, **kwargs) -> VerifyResultList:
         return self.predict(**kwargs).result
@@ -348,12 +367,12 @@ class ChatProgram(dspy.Module):
 # -- Registry -----------------------------------------------------------------
 
 _PROGRAMS: dict[str, type[dspy.Module]] = {
-    "code":            SegmentProgram,
-    "edit":            EditProgram,
-    "ask":             AskProgram,
-    "rubric_scaffold": RubricScaffoldProgram,
-    "rubric_verify":   RubricVerifyProgram,
-    "chat":            ChatProgram,
+    "code":             SegmentProgram,
+    "edit":             EditProgram,
+    "ask":              AskProgram,
+    "rubric_scaffold":  AspectScaffoldProgram,
+    "rubric_verify":    AspectVerifyProgram,
+    "chat":             ChatProgram,
 }
 
 
