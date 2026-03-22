@@ -213,25 +213,21 @@ class RubricHint(BaseModel):
 
 class GenerateSegments(dspy.Signature):
     """
-    Generate a thorough sequence of Excel Office JS code segments that together
-    fully accomplish the user's spreadsheet task.
+    Generate a sequence of Excel Office JS code segments that fully accomplish the task.
 
-    Decompose the task into as many fine-grained steps as make sense -- prefer
-    more segments over fewer. Each distinct concern should be its own segment:
-    writing data, applying formulas, formatting headers, formatting data rows,
-    adding a totals row, colour-coding, auto-fitting columns, etc.
-    A typical task should produce 5-10 segments; complex tasks may need more.
+    Decompose into as many fine-grained segments as needed — one concern per segment
+    (write data, apply formulas, format headers, format rows, totals, colour-coding,
+    autofit, etc.). Prefer more segments over fewer; 5-10 is typical.
 
-    Each segment must be:
-    - Self-contained and independently executable
-    - Scoped to a single coherent concern (not a catch-all "do everything" step)
-    - Include a clear explanation and 2-3 Q&A pairs
-    - Include all tweakable constants as parameters[]
+    Each segment: self-contained, single concern, clear explanation, 2-3 Q&A pairs,
+    all tweakable constants as parameters[].
+
+    Follow all rules in js_hint exactly — they list known runtime errors to avoid.
     """
     user_message:  str              = dspy.InputField(desc="What the user wants to do in the spreadsheet")
     ws_context:    WorksheetContext = dspy.InputField(desc="Current worksheet state")
     rubric_hint:   RubricHint       = dspy.InputField(desc="Optional rubric requirements to satisfy (may be empty)")
-    js_hint:       str              = dspy.InputField(desc="Known JS mistakes and fixes to avoid (may be empty)")
+    js_hint:       str              = dspy.InputField(desc="IMPORTANT: additional JS mistakes seen in recent runs that must be avoided — read carefully before writing any code (may be empty)")
     chat_history:  list[str]        = dspy.InputField(desc="Recent user messages for context (oldest first, may be empty)")
 
     result: SegmentList = dspy.OutputField()
@@ -239,22 +235,17 @@ class GenerateSegments(dspy.Signature):
 
 class EditSegments(dspy.Signature):
     """
-    Modify the given segment based on user feedback, then regenerate all
-    downstream segments so they remain consistent with the edit.
+    Modify the given segment based on user feedback, then regenerate all downstream
+    segments so they remain consistent. Output should be the edited segment first, then the regenerated remainder in order.
 
-    Apply the same decomposition principle as code generation: break work into
-    as many fine-grained steps as make sense. Do not collapse remaining steps
-    into fewer segments just because it is an edit -- preserve or increase
-    granularity where appropriate.
-
-    Output must contain exactly 1 + len(remaining_segments) segments:
-    the edited segment first, then the regenerated remainder in order.
+    Preserve or increase granularity — do not collapse steps.
+    Follow all rules in js_hint exactly — they list known runtime errors to avoid.
     """
     user_message:       str              = dspy.InputField(desc="User's feedback describing the desired change")
     ws_context:         WorksheetContext = dspy.InputField(desc="Current worksheet state")
     original_segment:   Segment          = dspy.InputField(desc="The segment to edit")
     remaining_segments: list[Segment]    = dspy.InputField(desc="Segments that follow the edited one (may be empty)")
-    js_hint:            str              = dspy.InputField(desc="Known JS mistakes and fixes to avoid (may be empty)")
+    js_hint:            str              = dspy.InputField(desc="IMPORTANT: additional JS mistakes seen in recent runs that must be avoided — read carefully before writing any code (may be empty)")
     chat_history:       list[str]        = dspy.InputField(desc="Recent user messages for context (oldest first, may be empty)")
 
     result: SegmentList = dspy.OutputField()
