@@ -40,12 +40,14 @@ class EndpointConfig:
         self.model    = model
 
 ENDPOINT_MODELS = {
-    "code":           EndpointConfig(Provider.GOOGLE, Model.GEMINI_3_FLASH),
-    "ask":            EndpointConfig(Provider.MISTRAL, Model.MISTRAL_SMALL),
-    "edit":           EndpointConfig(Provider.GOOGLE, Model.GEMINI_3_1_FLASH_LITE),
-    "rubric_scaffold":EndpointConfig(Provider.MISTRAL, Model.MINISTRAL),
-    "rubric_verify":  EndpointConfig(Provider.MISTRAL, Model.MISTRAL_SMALL),
-    "chat":           EndpointConfig(Provider.MISTRAL, Model.MISTRAL_SMALL),
+    "code":            EndpointConfig(Provider.GOOGLE, Model.GEMINI_3_FLASH),       # legacy warmup entry
+    "code_raw":        EndpointConfig(Provider.GOOGLE, Model.GEMINI_3_FLASH),       # step 1: write the JS
+    "code_segment":    EndpointConfig(Provider.GOOGLE, Model.GEMINI_3_1_FLASH_LITE),# step 2: wrap into segments
+    "ask":             EndpointConfig(Provider.MISTRAL, Model.MISTRAL_SMALL),
+    "edit":            EndpointConfig(Provider.GOOGLE, Model.GEMINI_3_1_FLASH_LITE),
+    "rubric_scaffold": EndpointConfig(Provider.MISTRAL, Model.MINISTRAL),
+    "rubric_verify":   EndpointConfig(Provider.MISTRAL, Model.MISTRAL_SMALL),
+    "chat":            EndpointConfig(Provider.MISTRAL, Model.MISTRAL_SMALL),
 }
 
 # API keys

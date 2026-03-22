@@ -111,25 +111,38 @@ def generate_segments(
     rubric: dict | None = None,
     chat_history: list[str] | None = None,
 ) -> list[dict]:
+    """
+    Two-step pipeline:
+      1. code_raw  — capable model writes complete, correct Office JS.
+      2. code_segment — cheap model slices the raw code into labelled segments.
+
+    The rubric parameter is accepted for API compat but no longer passed to the
+    LLM (the rubric gate was removed from the UI).
+    """
     from js_validator import mistakes_prompt_hint
-    from dspy_programs import RubricHint
 
-    rubric_hint = RubricHint()
-    if rubric:
-        rubric_hint = RubricHint(
-            hard_must_satisfy=[r["label"] for r in rubric.get("hard_requirements", [])],
-            soft_nice_to_have=[r["label"] for r in rubric.get("soft_requirements", [])],
-        )
+    ws = _make_ws_context(ws_context)
+    js_hint = mistakes_prompt_hint()
 
-    result = call_program(
-        "code",
+    # ── Step 1: generate raw Office JS ────────────────────────────────────────
+    raw_result = call_program(
+        "code_raw",
         user_message=user_message,
-        ws_context=_make_ws_context(ws_context),
-        rubric_hint=rubric_hint,
-        js_hint=mistakes_prompt_hint(),
+        ws_context=ws,
+        js_hint=js_hint,
         chat_history=chat_history or [],
     )
-    return _validate_and_dump_segments(result)
+    raw_code = raw_result.code
+    logger.info("[generate_segments] raw code length: %d chars", len(raw_code))
+
+    # ── Step 2: wrap raw code into segments ───────────────────────────────────
+    segment_result = call_program(
+        "code_segment",
+        raw_code=raw_code,
+        user_message=user_message,
+        ws_context=ws,
+    )
+    return _validate_and_dump_segments(segment_result)
 
 
 def edit_segments(
@@ -184,7 +197,7 @@ def scaffold_rubric(
     ws_context: dict,
     chat_history: list[str] | None = None,
 ) -> dict:
-    """Returns { aspects: [{id, label}, ...] } — the AspectList model dumped."""
+    """Returns the rubric dict directly -- matches what rubricManager.setRubric() expects."""
     result = call_program(
         "rubric_scaffold",
         user_message=user_message,
@@ -201,17 +214,19 @@ def verify_rubric(
     chat_history: list[str] | None = None,
 ) -> list[dict]:
     """
-    `rubric` is now { aspects: [{id, label}, ...] }.
     Returns a list of VerifyResult dicts.
-    server.py wraps this in {"results": [...]} for the front-end.
+    server.py wraps this in {"results": [...]} to match what LLMClient.rubricVerify()
+    destructures as res.results in rubricManager.showVerifyResults().
     """
-    from dspy_programs import Aspect, AspectList
+    from dspy_programs import Rubric, RubricItem
 
-    aspects_raw = rubric.get("aspects", [])
-    aspect_list = AspectList(aspects=[Aspect(**a) for a in aspects_raw])
+    rubric_model = Rubric(
+        hard_requirements=[RubricItem(**r) for r in rubric.get("hard_requirements", [])],
+        soft_requirements=[RubricItem(**r) for r in rubric.get("soft_requirements", [])],
+    )
     result = call_program(
         "rubric_verify",
-        aspects=aspect_list,
+        rubric=rubric_model,
         ws_context=_make_ws_context(ws_context),
         chat_history=chat_history or [],
     )

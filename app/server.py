@@ -54,9 +54,7 @@ def _warmup():
             cfg    = ENDPOINT_MODELS[endpoint]
             prefix = _PROVIDER_PREFIX[cfg.provider]
             key    = _PROVIDER_KEY[cfg.provider]
-            # Cache the LM client (opens provider connection)
             get_lm(prefix, cfg.model.value, key, endpoint)
-            # Cache the program instance (instantiates ChainOfThought)
             get_program(endpoint)
             logger.info("[Warmup]   %s -> %s/%s", endpoint, prefix, cfg.model.value)
 
@@ -67,8 +65,6 @@ def _warmup():
 
         logger.info("[Warmup] Done -- all programs and LM clients ready.")
     except Exception as exc:
-        # Warmup failure is non-fatal -- requests will still work, just slower
-        # on the first call.
         logger.warning("[Warmup] Failed (non-fatal): %s", exc)
 
 threading.Thread(target=_warmup, daemon=True, name="dspy-warmup").start()

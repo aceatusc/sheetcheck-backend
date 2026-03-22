@@ -39,7 +39,9 @@ logger = logging.getLogger(__name__)
 #   Gemini 3 Flash / 3.1 variants: 64,000 output tokens
 #   Mistral Small 2506 / Ministral: 131,072 output tokens
 MAX_TOKENS: dict[str, int] = {
-    "code":            64_000,   # 5-10 segments, each with code + qa + params
+    "code":            64_000,   # legacy — kept for warmup; pipeline now uses code_raw + code_segment
+    "code_raw":        32_000,   # step 1: raw Office JS code, no metadata
+    "code_segment":    32_000,   # step 2: wrap raw code into SegmentList
     "edit":            32_000,   # same shape as code
     "ask":              2_000,   # short answer + 2 follow-up questions
     "rubric_scaffold":  1_000,   # 2-4 rubric items
@@ -314,11 +316,108 @@ class ChatResponse(dspy.Signature):
     response: str = dspy.OutputField(desc="Helpful, concise answer -- markdown OK")
 
 
+# -- Two-step code generation -------------------------------------------------
+#
+# Step 1 (GenerateRawCode): A capable model focuses entirely on writing correct,
+# complete Office JS — no metadata, no segmentation, just working code.
+# Explicit pitfalls are listed so the model avoids the most common runtime errors.
+#
+# Step 2 (WrapRawCode): A cheap model receives the finished code and splits it
+# into labelled segments with descriptions, explanations, qa_pairs, parameters,
+# and sheet_context. It never rewrites the code — only slices and annotates it.
+
+class RawCode(BaseModel):
+    """Single block of complete Office JS that accomplishes the full task."""
+    code: str = Field(
+        description=(
+            "A single self-contained async Office JS snippet. "
+            "Must start with `await Excel.run(async (ctx) => {` and end with `});`. "
+            "All data writes, formulas, formatting and autofit in correct dependency order. "
+            "No markdown fences, no prose."
+        )
+    )
+
+
+class GenerateRawCode(dspy.Signature):
+    """
+    Write complete, correct Excel Office JS code that fully accomplishes the user's task.
+
+    Focus entirely on correctness. The code will be split into segments by a
+    separate step — do NOT segment it yourself; write one cohesive block.
+
+    CRITICAL rules to follow (violations cause runtime errors):
+    - NEVER use conditionalFormatting — it is unsupported in Office JS add-ins.
+      Use explicit cell-by-cell or range-by-range formatting instead.
+    - NEVER assign a scalar or 1-D array to .values / .numberFormat / .formulas.
+      These properties ALWAYS require a 2-D array: [[v1, v2], [v3, v4]].
+      For a single cell: range.values = [[value]].
+      For a single column of N rows: range.values = [[v1],[v2],...,[vN]].
+    - NEVER call .load() on a range and then write to it in the same sync block
+      without a ctx.sync() in between.
+    - NEVER read .values or .formulas before calling range.load("values") /
+      range.load("formulas") followed by await ctx.sync().
+    - Call await ctx.sync() after every logical batch of writes.
+    - Use getEntireColumn().format.autofitColumns() for column sizing — call it
+      AFTER all data and formatting is written.
+    - Avoid deeply nested loops; batch range writes where possible.
+    """
+    user_message:  str              = dspy.InputField(desc="What the user wants to do in the spreadsheet")
+    ws_context:    WorksheetContext = dspy.InputField(desc="Current worksheet state")
+    js_hint:       str              = dspy.InputField(desc="Known JS mistakes and recent failures to avoid (may be empty)")
+    chat_history:  list[str]        = dspy.InputField(desc="Recent user messages for context (oldest first, may be empty)")
+
+    result: RawCode = dspy.OutputField()
+
+
+class WrapRawCode(dspy.Signature):
+    """
+    Split the provided Office JS code into fine-grained, labelled segments.
+
+    Rules:
+    - DO NOT rewrite or modify any code. Slice the original code exactly.
+    - Each segment's `code` field must be a valid standalone Office JS snippet
+      (wrapped in its own `await Excel.run(async (ctx) => { ... await ctx.sync(); });`).
+    - Split at natural boundaries: one concern per segment (write data, apply
+      formulas, format headers, format rows, add totals, autofit, etc.).
+    - Prefer more segments over fewer — 5-10 is typical; complex tasks may need more.
+    - Fill in description, explanation, sheet_context, qa_pairs, edit_suggestions,
+      and parameters from the code content.
+    - parameters[]: any numeric/color/string constant the user might want to tweak.
+      Each must have key = the exact literal in the code, label = human name,
+      value = current value, type = "number" | "color" | "select" | "text".
+    - predecessors[]: list the seg-ids this segment depends on semantically.
+    - manual_steps: plain-English instructions for doing this step by hand in Excel.
+    """
+    raw_code:      str              = dspy.InputField(desc="Complete Office JS code to split into segments")
+    user_message:  str              = dspy.InputField(desc="Original task description — context for labelling")
+    ws_context:    WorksheetContext = dspy.InputField(desc="Current worksheet state")
+
+    result: SegmentList = dspy.OutputField()
+
+
 # -- Programs -----------------------------------------------------------------
 
 class SegmentProgram(dspy.Module):
     def __init__(self):
         self.predict = dspy.ChainOfThought(GenerateSegments)
+
+    def forward(self, **kwargs) -> SegmentList:
+        return self.predict(**kwargs).result
+
+
+class RawCodeProgram(dspy.Module):
+    """Step 1: write the raw Office JS code."""
+    def __init__(self):
+        self.predict = dspy.ChainOfThought(GenerateRawCode)
+
+    def forward(self, **kwargs) -> RawCode:
+        return self.predict(**kwargs).result
+
+
+class WrapCodeProgram(dspy.Module):
+    """Step 2: slice the raw code into annotated segments."""
+    def __init__(self):
+        self.predict = dspy.ChainOfThought(WrapRawCode)
 
     def forward(self, **kwargs) -> SegmentList:
         return self.predict(**kwargs).result
@@ -367,7 +466,9 @@ class ChatProgram(dspy.Module):
 # -- Registry -----------------------------------------------------------------
 
 _PROGRAMS: dict[str, type[dspy.Module]] = {
-    "code":             SegmentProgram,
+    "code":             SegmentProgram,     # legacy one-shot path (kept for warmup)
+    "code_raw":         RawCodeProgram,     # step 1: generate raw JS
+    "code_segment":     WrapCodeProgram,    # step 2: wrap into segments
     "edit":             EditProgram,
     "ask":              AskProgram,
     "rubric_scaffold":  AspectScaffoldProgram,
