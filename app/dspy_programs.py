@@ -134,6 +134,35 @@ class SegmentParameter(BaseModel):
     options: Optional[list[str]]                          = Field(default=None, description="Choices for 'select' type only")
 
 
+class OfficeJSCode(BaseModel):
+    """
+    A single self-contained Office JS snippet.
+
+    MUST follow these rules — violations cause runtime errors:
+    - Wrap in: await Excel.run(async (ctx) => { ... await ctx.sync(); });
+    - NEVER use .conditionalFormatting — not supported. Use explicit per-cell formatting in a loop.
+    - .values / .numberFormat / .formulas ALWAYS take a 2-D array sized to match the range exactly.
+      Single cell: [[value]]. Single column of N: [[v1],[v2],...]. Single row of N: [[v1,v2,...]].
+    - NEVER read .values/.formulas without load() + await ctx.sync() first.
+    - NEVER load() and write to the same range in one sync block.
+    - getRange address must exactly match the array dimensions (rows × cols).
+    - Column autofit: range.getEntireColumn().format.autofitColumns() — NEVER .autofit().
+    - Call autofitColumns() AFTER all data and formatting is written.
+    """
+    model_config = ConfigDict(extra="allow")
+
+    code: str = Field(
+        description=("Office JS snippet: await Excel.run(async (ctx) => { ... await ctx.sync(); }); ")
+    )
+
+    @classmethod
+    def model_validate(cls, value, **kwargs):
+        """Accept a plain string (from existing segment dicts) as well as a dict/object."""
+        if isinstance(value, str):
+            return cls(code=value)
+        return super().model_validate(value, **kwargs)
+
+
 class Segment(BaseModel):
     id:               str                    = Field(description="Unique segment identifier, e.g. 'seg-1'")
     description:      str                    = Field(description="Short imperative label, e.g. 'Write header row'")
@@ -141,11 +170,23 @@ class Segment(BaseModel):
     explanation:      str                    = Field(description="1-2 sentences: inputs to outputs")
     predecessors:     list[str]              = Field(default_factory=list)
     qa_pairs:         list[QAPair]           = Field(default_factory=list, description="2-3 design Q&A pairs")
-    edit_suggestions: list[str]              = Field(default_factory=list, description="2-3 short edit prompts")
+    edit_suggestions: list[str]             = Field(default_factory=list, description="2-3 short edit prompts")
     parameters:       list[SegmentParameter] = Field(default_factory=list, description="Tweakable constants in the code")
-    code:             str                    = Field(description="await Excel.run(async (ctx) => { ... await ctx.sync(); });")
+    code:             OfficeJSCode           = Field(description="The Office JS code for this step")
     undo_code:        str                    = Field(default="")
-    manual_steps:     str                    = Field(default="", description=("Step-by-step manual instructions for doing this step in the Excel UI."))
+    manual_steps:     str                    = Field(default="", description="Step-by-step manual instructions for doing this step in the Excel UI.")
+
+    def model_dump(self, **kwargs) -> dict:
+        """Unwrap OfficeJSCode → plain string so downstream JSON/validator sees seg['code'] as str."""
+        d = super().model_dump(**kwargs)
+        if isinstance(d.get("code"), dict):
+            d["code"] = d["code"].get("code", "")
+        return d
+
+    @property
+    def code_str(self) -> str:
+        """Convenience accessor returning the raw JS string."""
+        return self.code.code if isinstance(self.code, OfficeJSCode) else str(self.code)
 
 
 class SegmentList(BaseModel):
@@ -220,7 +261,8 @@ class GenerateSegments(dspy.Signature):
     autofit, etc.). Prefer more segments over fewer; 5-10 is typical.
 
     Each segment: self-contained, single concern, clear explanation, 2-3 Q&A pairs,
-    all tweakable constants as parameters[].
+    all tweakable constants as parameters[]. For column sizing always use
+    range.getEntireColumn().format.autofitColumns() — never .autofit().
 
     Follow all rules in js_hint exactly — they list known runtime errors to avoid.
     """
@@ -236,7 +278,8 @@ class GenerateSegments(dspy.Signature):
 class EditSegments(dspy.Signature):
     """
     Modify the given segment based on user feedback, then regenerate all downstream
-    segments so they remain consistent. Output should be the edited segment first, then the regenerated remainder in order.
+    segments so they remain consistent. Output exactly 1 + len(remaining_segments)
+    segments: the edited segment first, then the regenerated remainder in order.
 
     Preserve or increase granularity — do not collapse steps.
     Follow all rules in js_hint exactly — they list known runtime errors to avoid.

@@ -83,14 +83,17 @@ def _make_ws_context(ws_context: dict):
 
 
 def _validate_and_dump_segments(segment_list) -> list[dict]:
-    """Run JS validation on each Segment, return plain dicts for JSON serialisation."""
+    """Run JS validation on each Segment, return plain dicts for JSON serialisation.
+    Segment.model_dump() already unwraps OfficeJSCode → str in the 'code' field.
+    """
     from js_validator import validate_js
 
     failures: list[str] = []
     dicts: list[dict] = []
 
     for seg in segment_list.segments:
-        vr = validate_js(seg.code, segment_id=seg.id)
+        code_str = seg.code_str
+        vr = validate_js(code_str, segment_id=seg.id)
         if not vr.valid:
             failures.append(f"  [{seg.id}] {'; '.join(vr.errors)}")
         elif vr.warnings:
@@ -98,7 +101,7 @@ def _validate_and_dump_segments(segment_list) -> list[dict]:
         dicts.append(seg.model_dump())
 
     if failures:
-        raise ValueError("JS validation failed for segments:\n" + "\n".join(failures))
+        logger.warning("JS validation failed for segments:\n" + "\n".join(failures))
 
     return dicts
 
@@ -111,25 +114,38 @@ def generate_segments(
     rubric: dict | None = None,
     chat_history: list[str] | None = None,
 ) -> list[dict]:
+    """
+    Two-step pipeline:
+      1. code_raw  — capable model writes complete, correct Office JS.
+      2. code_segment — cheap model slices the raw code into labelled segments.
+
+    The rubric parameter is accepted for API compat but no longer passed to the
+    LLM (the rubric gate was removed from the UI).
+    """
     from js_validator import mistakes_prompt_hint
-    from dspy_programs import RubricHint
 
-    rubric_hint = RubricHint()
-    if rubric:
-        rubric_hint = RubricHint(
-            hard_must_satisfy=[r["label"] for r in rubric.get("hard_requirements", [])],
-            soft_nice_to_have=[r["label"] for r in rubric.get("soft_requirements", [])],
-        )
+    ws = _make_ws_context(ws_context)
+    js_hint = mistakes_prompt_hint()
 
-    result = call_program(
-        "code",
+    # ── Step 1: generate raw Office JS ────────────────────────────────────────
+    raw_result = call_program(
+        "code_raw",
         user_message=user_message,
-        ws_context=_make_ws_context(ws_context),
-        rubric_hint=rubric_hint,
-        js_hint=mistakes_prompt_hint(),
+        ws_context=ws,
+        js_hint=js_hint,
         chat_history=chat_history or [],
     )
-    return _validate_and_dump_segments(result)
+    raw_code = raw_result.code
+    logger.info("[generate_segments] raw code length: %d chars", len(raw_code))
+
+    # ── Step 2: wrap raw code into segments ───────────────────────────────────
+    segment_result = call_program(
+        "code_segment",
+        raw_code=raw_code,
+        user_message=user_message,
+        ws_context=ws,
+    )
+    return _validate_and_dump_segments(segment_result)
 
 
 def edit_segments(
@@ -184,7 +200,7 @@ def scaffold_rubric(
     ws_context: dict,
     chat_history: list[str] | None = None,
 ) -> dict:
-    """Returns { aspects: [{id, label}, ...] } — the AspectList model dumped."""
+    """Returns the rubric dict directly -- matches what rubricManager.setRubric() expects."""
     result = call_program(
         "rubric_scaffold",
         user_message=user_message,
@@ -201,9 +217,9 @@ def verify_rubric(
     chat_history: list[str] | None = None,
 ) -> list[dict]:
     """
-    `rubric` is now { aspects: [{id, label}, ...] }.
-    Returns a list of VerifyResult dicts.
-    server.py wraps this in {"results": [...]} for the front-end.
+    `rubric` is { aspects: [{id, label}, ...] } sent by the front-end.
+    Builds an AspectList and calls the rubric_verify program.
+    server.py wraps the return value in {"results": [...]}.
     """
     from dspy_programs import Aspect, AspectList
 

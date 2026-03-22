@@ -71,6 +71,13 @@ def _heuristic_check(code: str) -> ValidationResult:
             "Apply formatting explicitly in a loop instead."
         )
 
+    if re.search(r'\.autofit\s*\(\s*\)', code):
+        errors.append(
+            "autofit() is not a function in Office JS — use .format.autofitColumns() instead. "
+            "BAD: range.getEntireColumn().autofit(). "
+            "GOOD: range.getEntireColumn().format.autofitColumns()"
+        )
+
     # Dimension mismatch: detect getRange("A1:Cx") paired with a literal array
     # whose row count visibly doesn't match the range row span.
     for m in re.finditer(

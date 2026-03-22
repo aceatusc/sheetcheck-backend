@@ -1,6 +1,7 @@
 {
   "conditionalFormatting API used": "Not supported in Office JS add-ins. Apply formatting explicitly in a loop: values.forEach((row,i) => { if (condition) sheet.getRange(addr).format.font.color = '#hex'; })",
   "Array dimensions do not match range size": "Count range rows×cols carefully. A range of R rows × C cols needs a 2-D array of exactly R inner arrays each with C elements. BAD: 2-row range with [[a,b],[c,d],[e,f]]. GOOD: [[a,b],[c,d]]",
+  "autofit() called instead of autofitColumns()": "The correct method is autofitColumns(), not autofit(). BAD: range.getEntireColumn().autofit(). GOOD: range.getEntireColumn().format.autofitColumns()",
   "numberFormat assigned plain string on multi-cell range": "Wrap in a 2-D array matching the range dimensions: range.numberFormat = [['$#,##0','$#,##0'],['$#,##0','$#,##0']]",
   "values assigned 1-D array": "Excel JS API requires a 2-D array: range.values = [['a','b'],['c','d']]",
   "Excel.run callback missing async": "Always use: Excel.run(async (ctx) => { ... await ctx.sync(); })",
