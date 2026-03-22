@@ -222,9 +222,6 @@ def rubric_verify(body: dict):
     rubric  = body.get("rubric", {})
     context = body.get("context", {})
 
-    stub_key = rubric.get("stub_key", "")
-    if stub_key and stub_key in STUB_VERIFIES:
-        return jsonify({"results": STUB_VERIFIES[stub_key]})
     if not context.get("sheetData"):
         return jsonify({"results": STUB_VERIFY})
 

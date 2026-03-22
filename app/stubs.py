@@ -312,68 +312,58 @@ STUB_META = {
 STUB_RUBRICS = {
     "pnl": {
         "stub_key": "pnl",
-        "hard_requirements": [
-            {"id":"h1","label":"Header row with Month, Revenue, Expenses, Profit, Growth %","checked":False},
-            {"id":"h2","label":"6 months of data in rows 2–7","checked":False},
-            {"id":"h3","label":"Currency format on Revenue, Expenses, Profit","checked":False},
-        ],
-        "soft_requirements": [
-            {"id":"s1","label":"Visual hierarchy between header and data rows","checked":False},
-            {"id":"s2","label":"Growth % column shows trend direction","checked":False},
-            {"id":"s3","label":"Totals row at the bottom","checked":False},
-            {"id":"s4","label":"Column widths readable without scrolling","checked":False},
+        "aspects": [
+            {"id":"a1","label":"Header row contains all five expected columns: Month, Revenue, Expenses, Profit, Growth %"},
+            {"id":"a2","label":"Six months of data are populated in rows 2–7 with no gaps"},
+            {"id":"a3","label":"Revenue, Expenses, and Profit columns use a consistent currency format"},
+            {"id":"a4","label":"Visual hierarchy clearly separates the header row from data rows"},
+            {"id":"a5","label":"Growth % column correctly reflects month-over-month direction for each row"},
+            {"id":"a6","label":"Column widths are readable without horizontal scrolling"},
         ],
     },
     "sales": {
         "stub_key": "sales",
-        "hard_requirements": [
-            {"id":"h1","label":"Headers include at least Category, Description, Gross Amount, Tax Rate, Tax Owed, Status","checked":False},
-        ],
-        "soft_requirements": [
-            {"id":"s1","label":"Tax brackets visually colour-coded by rate","checked":False},
-            {"id":"s2","label":"Status column distinguishes Withheld vs Owed rows","checked":False},
+        "aspects": [
+            {"id":"a1","label":"Headers include at least Category, Description, Gross Amount, Tax Rate, Tax Owed, Status"},
+            {"id":"a2","label":"Tax brackets are visually colour-coded by rate so different rates are immediately distinguishable"},
+            {"id":"a3","label":"Status column clearly distinguishes Withheld rows from Owed rows"},
+            {"id":"a4","label":"Tax Owed formulas use ROUND to avoid floating-point cent errors"},
+            {"id":"a5","label":"Summary section shows Total Income, Total Tax Owed, and Effective Rate"},
         ],
     },
     "inventory": {
         "stub_key": "inventory",
-        "hard_requirements": [
-            {"id":"h1","label":"Headers include SKU, Product, Category, Stock, Reorder Pt","checked":False},
-            {"id":"h2","label":"Stock Value column uses Stock × Unit Cost formula","checked":False},
-            {"id":"h3","label":"Low-stock items (Stock ≤ Reorder Pt) are flagged","checked":False},
-        ],
-        "soft_requirements": [
-            {"id":"s1","label":"Currency format on Unit Cost and Stock Value","checked":False},
-            {"id":"s2","label":"Column widths auto-fitted","checked":False},
-            {"id":"s3","label":"Low-stock rows visually distinct from healthy stock","checked":False},
+        "aspects": [
+            {"id":"a1","label":"Headers include SKU, Product, Category, Stock, Reorder Pt, Unit Cost, and Stock Value"},
+            {"id":"a2","label":"Stock Value column uses a formula (Stock × Unit Cost) rather than static values"},
+            {"id":"a3","label":"Items where Stock ≤ Reorder Point are visually flagged as low-stock"},
+            {"id":"a4","label":"Currency format is consistently applied to Unit Cost and Stock Value"},
+            {"id":"a5","label":"Column widths are auto-fitted so no content is truncated"},
         ],
     },
 }
 
 STUB_VERIFIES = {
     "pnl": [
-        {"id":"h1","met":True, "reasoning":"Row 1 contains the five required headers.","references":["A1:E1"]},
-        {"id":"h2","met":True, "reasoning":"Rows 2–7 are populated with Jan–Jun data.","references":["A2:A7"]},
-        {"id":"h3","met":True, "reasoning":"$#,##0 format applied to B2:D7.","references":["B2:D7"]},
-        {"id":"s1","met":True, "reasoning":"Dark header row contrasts clearly with data rows.","references":["A1:E1"]},
-        {"id":"s2","met":True, "reasoning":"E3:E7 contains growth % formulas.","references":["E3:E7"]},
-        {"id":"s3","met":True, "reasoning":"Row 8 contains TOTAL with SUM formulas.","references":["A8:E8"]},
-        {"id":"s4","met":False,"reasoning":"autofitColumns called but column A may be too narrow for long labels.","references":["A1"]},
+        {"id":"a1","met":True, "reasoning":"Row 1 contains the five required headers.",            "references":["A1:E1"]},
+        {"id":"a2","met":True, "reasoning":"Rows 2–7 are populated with Jan–Jun data.",            "references":["A2:A7"]},
+        {"id":"a3","met":True, "reasoning":"$#,##0 format applied to B2:D7.",                      "references":["B2:D7"]},
+        {"id":"a4","met":True, "reasoning":"Dark header row contrasts clearly with data rows.",    "references":["A1:E1"]},
+        {"id":"a5","met":True, "reasoning":"E3:E7 contains month-over-month growth % formulas.",  "references":["E3:E7"]},
+        {"id":"a6","met":False,"reasoning":"autofitColumns called but column A may be too narrow for long labels.", "references":["A1"]},
     ],
     "sales": [
-        {"id":"h1","met":True, "reasoning":"Row 1 contains all six required headers.","references":["A1:F1"]},
-        {"id":"h2","met":True, "reasoning":"E2:E8 contains =ROUND(C*D,2) formulas for each row.","references":["E2:E8"]},
-        {"id":"h3","met":True, "reasoning":"Seven income rows populated across Employment, Freelance, Investment, Rental.","references":["A2:D8"]},
-        {"id":"s1","met":True, "reasoning":"Rows shaded by bracket: blue (22%), yellow (24%), green (15%).","references":["A2:F8"]},
-        {"id":"s2","met":True, "reasoning":"F2:F8 contains Withheld/Owed labels with colour coding.","references":["F2:F8"]},
-        {"id":"s3","met":True, "reasoning":"Rows 11–13 contain Total Income, Total Tax Owed, Effective Rate.","references":["A11:B13"]},
-        {"id":"s4","met":True, "reasoning":"autofitColumns called on A1:F13.","references":["A1:F13"]},
+        {"id":"a1","met":True, "reasoning":"Row 1 contains all six required headers.",                      "references":["A1:F1"]},
+        {"id":"a2","met":True, "reasoning":"Rows shaded by bracket: blue (22%), yellow (24%), green (15%).", "references":["A2:F8"]},
+        {"id":"a3","met":True, "reasoning":"F2:F8 contains Withheld/Owed labels with colour coding.",       "references":["F2:F8"]},
+        {"id":"a4","met":True, "reasoning":"E2:E8 uses =ROUND(C*D,2) formulas.",                           "references":["E2:E8"]},
+        {"id":"a5","met":True, "reasoning":"Summary rows present with Total Income, Tax Owed, Effective Rate.", "references":["H3:I6"]},
     ],
     "inventory": [
-        {"id":"h1","met":True, "reasoning":"Row 1 contains SKU, Product, Category, Stock, Reorder Pt, Unit Cost, Stock Value.","references":["A1:G1"]},
-        {"id":"h2","met":True, "reasoning":"G2:G9 contains =D*F formulas for Stock Value.","references":["G2:G9"]},
-        {"id":"h3","met":True, "reasoning":"Rows where Stock ≤ Reorder Pt are highlighted red.","references":["A2:G9"]},
-        {"id":"s1","met":True, "reasoning":"$#,##0.00 format applied to F2:G9.","references":["F2:G9"]},
-        {"id":"s2","met":True, "reasoning":"autofitColumns called on A1:G9.","references":["A1:G9"]},
-        {"id":"s3","met":True, "reasoning":"Low-stock rows use red fill and font, clearly distinct.","references":["A2:G9"]},
+        {"id":"a1","met":True, "reasoning":"Row 1 contains all seven required headers.",                  "references":["A1:G1"]},
+        {"id":"a2","met":True, "reasoning":"G2:G9 contains =D*F formulas for Stock Value.",               "references":["G2:G9"]},
+        {"id":"a3","met":True, "reasoning":"Low-stock rows highlighted in red where Stock ≤ Reorder Pt.","references":["A2:G9"]},
+        {"id":"a4","met":True, "reasoning":"$#,##0.00 format applied to F2:G9.",                          "references":["F2:G9"]},
+        {"id":"a5","met":True, "reasoning":"autofitColumns called on A1:G9.",                             "references":["A1:G9"]},
     ],
 }
