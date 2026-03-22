@@ -184,7 +184,7 @@ def scaffold_rubric(
     ws_context: dict,
     chat_history: list[str] | None = None,
 ) -> dict:
-    """Returns the rubric dict directly -- matches what rubricManager.setRubric() expects."""
+    """Returns { aspects: [{id, label}, ...] } — the AspectList model dumped."""
     result = call_program(
         "rubric_scaffold",
         user_message=user_message,
@@ -201,19 +201,17 @@ def verify_rubric(
     chat_history: list[str] | None = None,
 ) -> list[dict]:
     """
+    `rubric` is now { aspects: [{id, label}, ...] }.
     Returns a list of VerifyResult dicts.
-    server.py wraps this in {"results": [...]} to match what LLMClient.rubricVerify()
-    destructures as res.results in rubricManager.showVerifyResults().
+    server.py wraps this in {"results": [...]} for the front-end.
     """
-    from dspy_programs import Rubric, RubricItem
+    from dspy_programs import Aspect, AspectList
 
-    rubric_model = Rubric(
-        hard_requirements=[RubricItem(**r) for r in rubric.get("hard_requirements", [])],
-        soft_requirements=[RubricItem(**r) for r in rubric.get("soft_requirements", [])],
-    )
+    aspects_raw = rubric.get("aspects", [])
+    aspect_list = AspectList(aspects=[Aspect(**a) for a in aspects_raw])
     result = call_program(
         "rubric_verify",
-        rubric=rubric_model,
+        aspects=aspect_list,
         ws_context=_make_ws_context(ws_context),
         chat_history=chat_history or [],
     )

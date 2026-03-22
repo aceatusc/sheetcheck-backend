@@ -187,16 +187,13 @@ STUB_SEGMENTS = [
 ]
 
 STUB_RUBRIC = {
-    "hard_requirements": [
-        {"id": "h1", "label": "Header row present with correct column labels", "checked": False},
-        {"id": "h2", "label": "All 6 months of data filled in rows 2–7", "checked": False},
-        {"id": "h3", "label": "Currency format applied to Revenue, Expenses, Profit", "checked": False},
-    ],
-    "soft_requirements": [
-        {"id": "s1", "label": "Visual hierarchy differentiates headers from data", "checked": False},
-        {"id": "s2", "label": "Growth % column shows trend direction", "checked": False},
-        {"id": "s3", "label": "Totals row present at bottom", "checked": False},
-        {"id": "s4", "label": "Column widths are readable without scrolling", "checked": False},
+    "aspects": [
+        {"id": "a1", "label": "Header row is present and all column labels are correct"},
+        {"id": "a2", "label": "All 6 months of data are filled in rows 2–7"},
+        {"id": "a3", "label": "Currency format is applied to Revenue, Expenses, and Profit"},
+        {"id": "a4", "label": "Visual hierarchy clearly differentiates headers from data rows"},
+        {"id": "a5", "label": "Growth % column reflects the correct month-over-month direction"},
+        {"id": "a6", "label": "Column widths are readable without horizontal scrolling"},
     ],
 }
 
@@ -208,16 +205,15 @@ STUB_ASK = {
     ],
 }
 
-STUB_EDIT = STUB_SEGMENTS[5:]  # Return seg-2 + seg-3 as the edited chain stub
+STUB_EDIT = STUB_SEGMENTS[5:]  # Return seg-6+ as the edited chain stub
 
 STUB_VERIFY = [
-    {"id": "h1", "met": True,  "reasoning": "Row 1 contains Month, Revenue, Expenses, Profit, Growth % labels.", "references": ["A1:E1"]},
-    {"id": "h2", "met": True,  "reasoning": "Rows 2–7 are populated with Jan–Jun data.", "references": ["A2:A7"]},
-    {"id": "h3", "met": True,  "reasoning": "$#,##0 format applied to B2:D7.", "references": ["B2:D7"]},
-    {"id": "s1", "met": True,  "reasoning": "Dark header row contrasts with white/blue data rows.", "references": ["A1:E1"]},
-    {"id": "s2", "met": True,  "reasoning": "E3:E7 contains growth % formulas with percentage formatting.", "references": ["E3:E7"]},
-    {"id": "s3", "met": True,  "reasoning": "Row 8 contains TOTAL with SUM formulas.", "references": ["A8:E8"]},
-    {"id": "s4", "met": False, "reasoning": "autofitColumns was called but column A may still be too narrow for 'GRAND TOTAL'.", "references": ["A8"]},
+    {"id": "a1", "met": True,  "reasoning": "Row 1 contains Month, Revenue, Expenses, Profit, Growth % labels.", "references": ["A1:E1"]},
+    {"id": "a2", "met": True,  "reasoning": "Rows 2–7 are populated with Jan–Jun data.", "references": ["A2:A7"]},
+    {"id": "a3", "met": True,  "reasoning": "$#,##0 format applied to B2:D7.", "references": ["B2:D7"]},
+    {"id": "a4", "met": True,  "reasoning": "Dark header row contrasts with white/blue data rows.", "references": ["A1:E1"]},
+    {"id": "a5", "met": True,  "reasoning": "E3:E7 contains growth % formulas with percentage formatting.", "references": ["E3:E7"]},
+    {"id": "a6", "met": False, "reasoning": "autofitColumns was called but column A may still be too narrow for 'GRAND TOTAL'.", "references": ["A8"]},
 ]
 
 
@@ -278,36 +274,38 @@ Each segment must have the same structure as segments from /code (id, descriptio
 Do NOT include markdown fences or any text outside the JSON array.
 """ + f"Example single-segment edit response: {json.dumps([STUB_EDIT])}\n",
 
-"rubric_scaffold": """You are an Excel task evaluator. Generate an initial rubric for a spreadsheet task.
+"rubric_scaffold": """You are an Excel worksheet analyst. Given the user's task and current sheet state, identify 3-6 important aspects the user should verify.
 
-The user will describe their task. Respond with ONLY a JSON object:
+Aspects are thought-provoking dimensions that help the user catch blind spots, hidden assumptions, and unknown unknowns. Write each as a specific, actionable check (e.g. "Column headers match the naming convention used elsewhere in the workbook").
+
+Respond with ONLY a JSON object:
 {
-  "hard_requirements": [
-    {"id": "h1", "label": "Requirement text", "checked": false}
-  ],
-  "soft_requirements": [
-    {"id": "s1", "label": "Requirement text", "checked": false}
+  "aspects": [
+    {"id": "a1", "label": "Aspect description"},
+    {"id": "a2", "label": "Aspect description"}
   ]
 }
 
-Generate 1-2 hard and 1-2 soft requirements. Hard = must-have correctness criteria. Soft = nice-to have criteria.
+Focus on things the user might not have explicitly mentioned but that matter for correctness, consistency, and usability.
 Respond with ONLY the JSON, no markdown.
 """,
 
-"rubric_verify": """You are an Excel task evaluator. Evaluate whether a completed worksheet satisfies each rubric requirement.
+"rubric_verify": """You are an Excel worksheet analyst. Evaluate whether the current sheet satisfies each aspect.
 
-You will receive the rubric and worksheet state. Respond with ONLY a JSON array:
-[
-  {
-    "id": "h1",
-    "met": true,
-    "reasoning": "One sentence explanation",
-    "references": ["A1:E1", "B2:D7"]
-  }
-]
+You will receive a list of aspects and the worksheet state. Respond with ONLY a JSON object:
+{
+  "results": [
+    {
+      "id": "a1",
+      "met": true,
+      "reasoning": "One sentence explanation",
+      "references": ["A1:E1", "B2:D7"]
+    }
+  ]
+}
 
-Include every rubric item (hard and soft). Be precise about cell references.
-Respond with ONLY the JSON array, no markdown.
+Cover every aspect. Be precise about cell references. met=true means the aspect is clearly satisfied.
+Respond with ONLY the JSON object, no markdown.
 """,
 
 "chat": """You are a helpful Excel and spreadsheet assistant. Answer the user's question clearly and concisely.
