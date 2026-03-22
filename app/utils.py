@@ -214,19 +214,17 @@ def verify_rubric(
     chat_history: list[str] | None = None,
 ) -> list[dict]:
     """
-    Returns a list of VerifyResult dicts.
-    server.py wraps this in {"results": [...]} to match what LLMClient.rubricVerify()
-    destructures as res.results in rubricManager.showVerifyResults().
+    `rubric` is { aspects: [{id, label}, ...] } sent by the front-end.
+    Builds an AspectList and calls the rubric_verify program.
+    server.py wraps the return value in {"results": [...]}.
     """
-    from dspy_programs import Rubric, RubricItem
+    from dspy_programs import Aspect, AspectList
 
-    rubric_model = Rubric(
-        hard_requirements=[RubricItem(**r) for r in rubric.get("hard_requirements", [])],
-        soft_requirements=[RubricItem(**r) for r in rubric.get("soft_requirements", [])],
-    )
+    aspects_raw = rubric.get("aspects", [])
+    aspect_list = AspectList(aspects=[Aspect(**a) for a in aspects_raw])
     result = call_program(
         "rubric_verify",
-        rubric=rubric_model,
+        aspects=aspect_list,
         ws_context=_make_ws_context(ws_context),
         chat_history=chat_history or [],
     )
