@@ -371,7 +371,8 @@ class GenerateRawCode(dspy.Signature):
 
 class WrapRawCode(dspy.Signature):
     """
-    Split the provided Office JS code into fine-grained, labelled segments.
+    Split the provided Office JS code into the most granular possible segments,
+    where each segment represents exactly one logical, semantic unit of work.
 
     Rules:
     - DO NOT rewrite or modify any code. Slice the original code exactly.
@@ -379,7 +380,6 @@ class WrapRawCode(dspy.Signature):
       (wrapped in its own `await Excel.run(async (ctx) => { ... await ctx.sync(); });`).
     - Split at natural boundaries: one concern per segment (write data, apply
       formulas, format headers, format rows, add totals, autofit, etc.).
-    - Prefer more segments over fewer — 5-10 is typical; complex tasks may need more.
     - Fill in description, explanation, sheet_context, qa_pairs, edit_suggestions,
       and parameters from the code content.
     - parameters[]: any numeric/color/string constant the user might want to tweak.
