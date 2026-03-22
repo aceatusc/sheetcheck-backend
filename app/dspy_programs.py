@@ -41,7 +41,7 @@ logger = logging.getLogger(__name__)
 MAX_TOKENS: dict[str, int] = {
     "code":            64_000,   # legacy — kept for warmup; pipeline now uses code_raw + code_segment
     "code_raw":        32_000,   # step 1: raw Office JS code, no metadata
-    "code_segment":    64_000,   # step 2: wrap into segments — high limit for many granular segments
+    "code_segment":    32_000,   # step 2: wrap raw code into SegmentList
     "edit":            32_000,   # same shape as code
     "ask":              2_000,   # short answer + 2 follow-up questions
     "rubric_scaffold":  1_000,   # 2-4 rubric items
@@ -374,13 +374,19 @@ class WrapRawCode(dspy.Signature):
     Split the provided Office JS code into the most granular possible segments,
     where each segment represents exactly one logical, semantic unit of work.
 
-    - There is no upper limit on segment count. 10-20 segments is normal for
-      a moderately complex task; very complex tasks may have more.
-
-    CODE RULES — do not alter the logic:
-    - DO NOT rewrite, reorder, or optimise any code. Copy it exactly.
-    - Never split inside a single Excel.run block in a way that would leave
-      unmatched braces — always produce syntactically complete snippets.
+    Rules:
+    - DO NOT rewrite or modify any code. Slice the original code exactly.
+    - Each segment's `code` field must be a valid standalone Office JS snippet
+      (wrapped in its own `await Excel.run(async (ctx) => { ... await ctx.sync(); });`).
+    - Split at natural boundaries: one concern per segment (write data, apply
+      formulas, format headers, format rows, add totals, autofit, etc.).
+    - Fill in description, explanation, sheet_context, qa_pairs, edit_suggestions,
+      and parameters from the code content.
+    - parameters[]: any numeric/color/string constant the user might want to tweak.
+      Each must have key = the exact literal in the code, label = human name,
+      value = current value, type = "number" | "color" | "select" | "text".
+    - predecessors[]: list the seg-ids this segment depends on semantically.
+    - manual_steps: plain-English instructions for doing this step by hand in Excel.
     """
     raw_code:      str              = dspy.InputField(desc="Complete Office JS code to split into segments")
     user_message:  str              = dspy.InputField(desc="Original task description — context for labelling")
