@@ -324,7 +324,7 @@ STUB_RUBRICS = {
     "sales": {
         "stub_key": "sales",
         "aspects": [
-            {"id":"a1","label":"Headers include at least Category, Description, Gross Amount, Tax Rate, Tax Owed, Status"},
+            {"id":"a1","label":"Headers should include Description, Gross Amount, Tax Rate, Tax Owed."},
             {"id":"a2","label":"Tax brackets are visually colour-coded by rate so different rates are immediately distinguishable"},
             {"id":"a3","label":"Status column clearly distinguishes Withheld rows from Owed rows"},
             {"id":"a4","label":"Tax Owed formulas use ROUND to avoid floating-point cent errors"},

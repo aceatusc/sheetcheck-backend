@@ -42,8 +42,8 @@ MAX_TOKENS: dict[str, int] = {
     "code":            64_000,   # 5-10 segments, each with code + qa + params
     "edit":            32_000,   # same shape as code
     "ask":              2_000,   # short answer + 2 follow-up questions
-    "rubric_scaffold":  1_000,   # 2-4 rubric items
-    "rubric_verify":    4_000,   # one reasoning line per rubric item
+    "rubric_scaffold":  8_000,   # 2-4 rubric items
+    "rubric_verify":    8_000,   # one reasoning line per rubric item
     "chat":             2_000,   # conversational answer
 }
 _DEFAULT_MAX_TOKENS = 8_096
