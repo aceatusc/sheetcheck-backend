@@ -78,6 +78,20 @@ def _heuristic_check(code: str) -> ValidationResult:
             "GOOD: range.getEntireColumn().format.autofitColumns()"
         )
 
+    # Detect range.getRange(...) — getRange is a Worksheet method, not a Range method.
+    # Look for a variable that is likely a range (assigned via getRange/getCell/getUsedRange)
+    # and then has .getRange() called on it.
+    range_vars = set(re.findall(
+        r'(?:const|let|var)\s+(\w+)\s*=\s*\w+\.(?:getRange|getCell|getUsedRange|getUsedRangeOrNullObject|getEntireColumn|getEntireRow)\b',
+        code
+    ))
+    for var in range_vars:
+        if re.search(rf'\b{re.escape(var)}\.getRange\s*\(', code):
+            errors.append(
+                f"range.getRange() is not a function — getRange() belongs to Worksheet, not Range. "
+                f"BAD: {var}.getRange('A1'). GOOD: sheet.getRange('A1')"
+            )
+
     # Dimension mismatch: detect getRange("A1:Cx") paired with a literal array
     # whose row count visibly doesn't match the range row span.
     for m in re.finditer(
