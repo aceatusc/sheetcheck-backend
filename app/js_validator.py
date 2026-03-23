@@ -65,6 +65,69 @@ def _heuristic_check(code: str) -> ValidationResult:
             ".values assigned a 1-D array — Excel JS API requires a 2-D array: [[…],[…]]"
         )
 
+    if re.search(r'\.conditionalFormatting\b', code):
+        errors.append(
+            "conditionalFormatting API used — not supported in Office JS add-ins. "
+            "Apply formatting explicitly in a loop instead."
+        )
+
+    if re.search(r'\.autofit\s*\(\s*\)', code):
+        errors.append(
+            "autofit() is not a function in Office JS — use .format.autofitColumns() instead. "
+            "BAD: range.getEntireColumn().autofit(). "
+            "GOOD: range.getEntireColumn().format.autofitColumns()"
+        )
+
+    # Detect range.getRange(...) — getRange is a Worksheet method, not a Range method.
+    # Look for a variable that is likely a range (assigned via getRange/getCell/getUsedRange)
+    # and then has .getRange() called on it.
+    range_vars = set(re.findall(
+        r'(?:const|let|var)\s+(\w+)\s*=\s*\w+\.(?:getRange|getCell|getUsedRange|getUsedRangeOrNullObject|getEntireColumn|getEntireRow)\b',
+        code
+    ))
+    for var in range_vars:
+        if re.search(rf'\b{re.escape(var)}\.getRange\s*\(', code):
+            errors.append(
+                f"range.getRange() is not a function — getRange() belongs to Worksheet, not Range. "
+                f"BAD: {var}.getRange('A1'). GOOD: sheet.getRange('A1')"
+            )
+
+    if re.search(r'\.getRow\s*\(', code):
+        errors.append(
+            "Range.getRow() does not exist in Office JS. "
+            "To format a row use sheet.getRange() with explicit row address. "
+            "BAD: range.getRow(0).format.fill.color. "
+            "GOOD: sheet.getRange('A1:Z1').format.fill.color"
+        )
+
+    # Dimension mismatch: detect getRange("A1:Cx") paired with a literal array
+    # whose row count visibly doesn't match the range row span.
+    for m in re.finditer(
+        r'getRange\("[A-Z]+(\d+):[A-Z]+(\d+)"\)[^;]*?\.(?:values|formulas|numberFormat)\s*=\s*(\[)',
+        code, re.DOTALL
+    ):
+        start_row, end_row = int(m.group(1)), int(m.group(2))
+        range_rows = end_row - start_row + 1
+        # Count top-level inner arrays in the literal that follows
+        literal_start = m.start(3)
+        depth, inner_count, i = 0, 0, literal_start
+        while i < len(code):
+            if code[i] == '[':
+                if depth == 1:
+                    inner_count += 1
+                depth += 1
+            elif code[i] == ']':
+                depth -= 1
+                if depth == 0:
+                    break
+            i += 1
+        if inner_count > 0 and inner_count != range_rows:
+            warnings.append(
+                f"Array dimensions may not match range size: range spans {range_rows} row(s) "
+                f"but array has {inner_count} inner array(s). "
+                "Ensure the 2-D array is exactly [rows × cols]."
+            )
+
     for m in re.finditer(r'getRange\("([A-Z]+)(\d+):([A-Z]+)(\d+)"\)', code):
         r1, r2 = int(m.group(2)), int(m.group(4))
         if r1 > 1_048_576 or r2 > 1_048_576:

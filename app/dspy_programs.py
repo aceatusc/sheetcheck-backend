@@ -21,7 +21,7 @@ from functools import lru_cache
 from typing import Any, Literal, Optional, Union
 
 import dspy
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 logger = logging.getLogger(__name__)
 
@@ -134,6 +134,35 @@ class SegmentParameter(BaseModel):
     options: Optional[list[str]]                          = Field(default=None, description="Choices for 'select' type only")
 
 
+class OfficeJSCode(BaseModel):
+    """
+    A single self-contained Office JS snippet.
+
+    MUST follow these rules — violations cause runtime errors:
+    - Wrap in: await Excel.run(async (ctx) => { ... await ctx.sync(); });
+    - NEVER use .conditionalFormatting — not supported. Use explicit per-cell formatting in a loop.
+    - .values / .numberFormat / .formulas ALWAYS take a 2-D array sized to match the range exactly.
+      Single cell: [[value]]. Single column of N: [[v1],[v2],...]. Single row of N: [[v1,v2,...]].
+    - NEVER read .values/.formulas without load() + await ctx.sync() first.
+    - NEVER load() and write to the same range in one sync block.
+    - getRange address must exactly match the array dimensions (rows × cols).
+    - Column autofit: range.getEntireColumn().format.autofitColumns() — NEVER .autofit().
+    - Call autofitColumns() AFTER all data and formatting is written.
+    """
+    model_config = ConfigDict(extra="allow")
+
+    code: str = Field(
+        description=("Office JS snippet: await Excel.run(async (ctx) => { ... await ctx.sync(); }); ")
+    )
+
+    @classmethod
+    def model_validate(cls, value, **kwargs):
+        """Accept a plain string (from existing segment dicts) as well as a dict/object."""
+        if isinstance(value, str):
+            return cls(code=value)
+        return super().model_validate(value, **kwargs)
+
+
 class Segment(BaseModel):
     id:               str                    = Field(description="Unique segment identifier, e.g. 'seg-1'")
     description:      str                    = Field(description="Short imperative label, e.g. 'Write header row'")
@@ -141,11 +170,30 @@ class Segment(BaseModel):
     explanation:      str                    = Field(description="1-2 sentences: inputs to outputs")
     predecessors:     list[str]              = Field(default_factory=list)
     qa_pairs:         list[QAPair]           = Field(default_factory=list, description="2-3 design Q&A pairs")
-    edit_suggestions: list[str]              = Field(default_factory=list, description="2-3 short edit prompts")
+    edit_suggestions: list[str]             = Field(default_factory=list, description="2-3 short edit prompts")
     parameters:       list[SegmentParameter] = Field(default_factory=list, description="Tweakable constants in the code")
-    code:             str                    = Field(description="await Excel.run(async (ctx) => { ... await ctx.sync(); });")
+    code:             OfficeJSCode           = Field(description="The Office JS code for this step")
     undo_code:        str                    = Field(default="")
-    manual_steps:     str                    = Field(default="", description=("Step-by-step manual instructions for doing this step in the Excel UI."))
+    manual_steps:     str                    = Field(default="", description="Step-by-step manual instructions for doing this step in the Excel UI.")
+
+    @field_validator("code", mode="before")
+    @classmethod
+    def _coerce_code(cls, v):
+        if isinstance(v, str):
+            return {"code": v}
+        return v
+
+    def model_dump(self, **kwargs) -> dict:
+        """Unwrap OfficeJSCode → plain string so downstream JSON/validator sees seg['code'] as str."""
+        d = super().model_dump(**kwargs)
+        if isinstance(d.get("code"), dict):
+            d["code"] = d["code"].get("code", "")
+        return d
+
+    @property
+    def code_str(self) -> str:
+        """Convenience accessor returning the raw JS string."""
+        return self.code.code if isinstance(self.code, OfficeJSCode) else str(self.code)
 
 
 class SegmentList(BaseModel):
@@ -213,25 +261,24 @@ class RubricHint(BaseModel):
 
 class GenerateSegments(dspy.Signature):
     """
-    Generate a thorough sequence of Excel Office JS code segments that together
-    fully accomplish the user's spreadsheet task.
+    Generate a sequence of Excel Office JS code segments that fully accomplish the task.
 
-    Decompose the task into as many fine-grained steps as make sense -- prefer
-    more segments over fewer. Each distinct concern should be its own segment:
-    writing data, applying formulas, formatting headers, formatting data rows,
-    adding a totals row, colour-coding, auto-fitting columns, etc.
-    A typical task should produce 5-10 segments; complex tasks may need more.
+    Decompose into as many fine-grained segments as needed — one concern per segment
+    (write data, apply formulas, format headers, format rows, totals, colour-coding,
+    autofit, etc.). Prefer more segments over fewer; 5-10 is typical.
 
-    Each segment must be:
-    - Self-contained and independently executable
-    - Scoped to a single coherent concern (not a catch-all "do everything" step)
-    - Include a clear explanation and 2-3 Q&A pairs
-    - Include all tweakable constants as parameters[]
+    Each segment: self-contained, single concern, clear explanation, 2-3 Q&A pairs,
+    all tweakable constants as parameters[]. For column sizing always use
+    range.getEntireColumn().format.autofitColumns() — never .autofit().
+    Always call sheet.getRange() not range.getRange() — getRange() is a Worksheet method only.
+    Never call range.getRow() — it does not exist. Use sheet.getRange('A1:Z1') with an explicit address.
+
+    Follow all rules in js_hint exactly — they list known runtime errors to avoid.
     """
     user_message:  str              = dspy.InputField(desc="What the user wants to do in the spreadsheet")
     ws_context:    WorksheetContext = dspy.InputField(desc="Current worksheet state")
     rubric_hint:   RubricHint       = dspy.InputField(desc="Optional rubric requirements to satisfy (may be empty)")
-    js_hint:       str              = dspy.InputField(desc="Known JS mistakes and fixes to avoid (may be empty)")
+    js_hint:       str              = dspy.InputField(desc="IMPORTANT: additional JS mistakes seen in recent runs that must be avoided — read carefully before writing any code (may be empty)")
     chat_history:  list[str]        = dspy.InputField(desc="Recent user messages for context (oldest first, may be empty)")
 
     result: SegmentList = dspy.OutputField()
@@ -239,22 +286,17 @@ class GenerateSegments(dspy.Signature):
 
 class EditSegments(dspy.Signature):
     """
-    Modify the given segment based on user feedback, then regenerate all
-    downstream segments so they remain consistent with the edit.
+    Modify the given segment based on user feedback, then regenerate all downstream
+    segments so they remain consistent. Output the edited segment first, then the regenerated remainder in order.
 
-    Apply the same decomposition principle as code generation: break work into
-    as many fine-grained steps as make sense. Do not collapse remaining steps
-    into fewer segments just because it is an edit -- preserve or increase
-    granularity where appropriate.
-
-    Output must contain exactly 1 + len(remaining_segments) segments:
-    the edited segment first, then the regenerated remainder in order.
+    Preserve or increase granularity — do not collapse steps.
+    Follow all rules in js_hint exactly — they list known runtime errors to avoid.
     """
     user_message:       str              = dspy.InputField(desc="User's feedback describing the desired change")
     ws_context:         WorksheetContext = dspy.InputField(desc="Current worksheet state")
     original_segment:   Segment          = dspy.InputField(desc="The segment to edit")
     remaining_segments: list[Segment]    = dspy.InputField(desc="Segments that follow the edited one (may be empty)")
-    js_hint:            str              = dspy.InputField(desc="Known JS mistakes and fixes to avoid (may be empty)")
+    js_hint:            str              = dspy.InputField(desc="IMPORTANT: additional JS mistakes seen in recent runs that must be avoided — read carefully before writing any code (may be empty)")
     chat_history:       list[str]        = dspy.InputField(desc="Recent user messages for context (oldest first, may be empty)")
 
     result: SegmentList = dspy.OutputField()
@@ -276,12 +318,12 @@ class AnswerQuestion(dspy.Signature):
 
 class ScaffoldAspects(dspy.Signature):
     """
-    Given the user's chat history and current worksheet state, identify 3-6
+    Given the user's chat history and current worksheet state, identify
     *important aspects* the user should verify about the task.
 
     Aspects are thought-provoking dimensions that help the user overcome blind spots and hidden assumptions.
-    Write each as a concise, specific, actionable question or check
-    (e.g. "Are column headers consistent with the existing sheet naming convention?").
+    Write each as a concise, specific, actionable item or verification
+    (e.g. "Column headers should be consistent with the existing sheet naming convention").
     Focus on things the user might not have explicitly mentioned but that matter
     for the task (unknown unknowns, common spreadsheet agents pitfalls, data integrity).
     """
