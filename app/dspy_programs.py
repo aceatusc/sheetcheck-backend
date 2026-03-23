@@ -21,7 +21,7 @@ from functools import lru_cache
 from typing import Any, Literal, Optional, Union
 
 import dspy
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 logger = logging.getLogger(__name__)
 
@@ -175,6 +175,13 @@ class Segment(BaseModel):
     code:             OfficeJSCode           = Field(description="The Office JS code for this step")
     undo_code:        str                    = Field(default="")
     manual_steps:     str                    = Field(default="", description="Step-by-step manual instructions for doing this step in the Excel UI.")
+
+    @field_validator("code", mode="before")
+    @classmethod
+    def _coerce_code(cls, v):
+        if isinstance(v, str):
+            return {"code": v}
+        return v
 
     def model_dump(self, **kwargs) -> dict:
         """Unwrap OfficeJSCode → plain string so downstream JSON/validator sees seg['code'] as str."""
