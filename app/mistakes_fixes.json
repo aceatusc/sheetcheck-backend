@@ -1,6 +1,6 @@
 {
   "conditionalFormatting": "Not supported — loop and set format per cell.",
-  "Array dimension mismatch": "Range R×C needs exactly R inner arrays of C elements each.",
+  "Array dimension mismatch": "Range R×C needs R inner arrays of C elements. Note: Merged ranges still require the full original R×C array size.",
   "autofit() instead of autofitColumns()": "Use range.getEntireColumn().format.autofitColumns()",
   "range.getRange()": "getRange() is Worksheet-only — use sheet.getRange('A1')",
   "range.getRow()": "Does not exist — use sheet.getRange('A1:Z1') with explicit address",

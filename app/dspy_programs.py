@@ -120,8 +120,9 @@ class SegmentParameter(BaseModel):
 _OFFICE_JS_RULES = (
     "Office JS snippet. Rules: "
     "(1) await Excel.run(async (ctx) => { …; await ctx.sync(); }); "
-    "(2) .values/.formulas/.numberFormat need a 2-D array matching range dims — "
-    "[[v]] one cell, [[v1],[v2],…] column, [[v1,v2,…]] row; "
+    "(2) .values/.formulas/.numberFormat need a 2-D array matching range dims: "
+    "[[v]] for 1x1, [[v1,v2]] for 1x2 row. Note: titleRange.merge() still requires "
+    "the full original range width (e.g., 6 cols = [[v,'','','','','']]); "
     "(3) sheet.getRange() only — never range.getRange(); "
     "(4) no range.getRow() — use sheet.getRange('A1:Z1'); "
     "(5) no getLastCell().getEnd() — use sheet.getUsedRange()+load('rowCount') for last row; "
@@ -154,7 +155,6 @@ class Segment(BaseModel):
     edit_suggestions: list[str]              = Field(default_factory=list, description="2-3 short edit prompts")
     parameters:       list[SegmentParameter] = Field(default_factory=list, description="Tweakable constants")
     code:             OfficeJSCode           = Field(description="Office JS for this step")
-    undo_code:        str                    = Field(default="")
     manual_steps:     str                    = Field(default="", description="Manual Excel UI steps if automation fails")
 
     @field_validator("code", mode="before")
