@@ -101,7 +101,7 @@ def _validate_and_dump_segments(segment_list) -> list[dict]:
         dicts.append(seg.model_dump())
 
     if failures:
-        logger.warning("JS validation failed for segments:\n" + "\n".join(failures))
+        raise ValueError("JS validation failed for segments:\n" + "\n".join(failures))
 
     return dicts
 
@@ -114,39 +114,18 @@ def generate_segments(
     rubric: dict | None = None,
     chat_history: list[str] | None = None,
 ) -> list[dict]:
-    """
-    Two-step pipeline:
-      1. code_raw  — capable model writes complete, correct Office JS.
-      2. code_segment — cheap model slices the raw code into labelled segments.
-
-    The rubric parameter is accepted for API compat but no longer passed to the
-    LLM (the rubric gate was removed from the UI).
-    """
     from js_validator import mistakes_prompt_hint
+    from dspy_programs import RubricHint
 
-    ws = _make_ws_context(ws_context)
-    js_hint = mistakes_prompt_hint()
-
-    # ── Step 1: generate raw Office JS ────────────────────────────────────────
-    raw_result = call_program(
-        "code_raw",
+    result = call_program(
+        "code",
         user_message=user_message,
-        ws_context=ws,
-        js_hint=js_hint,
+        ws_context=_make_ws_context(ws_context),
+        rubric_hint=RubricHint(),
+        js_hint=mistakes_prompt_hint(),
         chat_history=chat_history or [],
     )
-    raw_code = raw_result.code
-    logger.info("[generate_segments] raw code length: %d chars", len(raw_code))
-
-    # ── Step 2: wrap raw code into segments ───────────────────────────────────
-    segment_result = call_program(
-        "code_segment",
-        raw_code=raw_code,
-        user_message=user_message,
-        ws_context=ws,
-    )
-    return _validate_and_dump_segments(segment_result)
-
+    return _validate_and_dump_segments(result)
 
 def edit_segments(
     user_message: str,
