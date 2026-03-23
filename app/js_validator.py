@@ -36,10 +36,10 @@ def _heuristic_check(code: str) -> ValidationResult:
     warnings: list[str] = []
 
     if "Excel.run" not in code:
-        warnings.append("No Excel.run() call found — is this Office JS code?")
+        warnings.append("No Excel.run() — is this Office JS?")
 
     if "await ctx.sync()" not in code and "await context.sync()" not in code:
-        warnings.append("No ctx.sync() / context.sync() call found — changes may not be flushed.")
+        warnings.append("No ctx.sync() — changes may not be flushed.")
 
     pairs = {"(": ")", "{": "}", "[": "]"}
     stack: list[str] = []
@@ -48,75 +48,47 @@ def _heuristic_check(code: str) -> ValidationResult:
             stack.append(pairs[ch])
         elif ch in pairs.values():
             if not stack or stack[-1] != ch:
-                errors.append(f"Unmatched bracket/paren: '{ch}'")
+                errors.append(f"Unmatched '{ch}'")
                 break
             stack.pop()
     if stack:
-        errors.append(f"Unclosed bracket/paren — expected '{stack[-1]}' before end of code")
+        errors.append(f"Unclosed '{stack[-1]}'")
 
     if re.search(r'\.numberFormat\s*=\s*"[^"]*"', code):
-        warnings.append(
-            "numberFormat assigned a plain string — for multi-cell ranges use a 2-D array "
-            "e.g. [['$#,##0','$#,##0'],…]"
-        )
+        warnings.append("numberFormat: use 2-D array e.g. [['$#,##0']]")
 
     if re.search(r'\.values\s*=\s*\[[^\[]*\](?!\])', code):
-        warnings.append(
-            ".values assigned a 1-D array — Excel JS API requires a 2-D array: [[…],[…]]"
-        )
+        warnings.append(".values: use 2-D array [[…],[…]]")
 
     if re.search(r'\.conditionalFormatting\b', code):
-        errors.append(
-            "conditionalFormatting API used — not supported in Office JS add-ins. "
-            "Apply formatting explicitly in a loop instead."
-        )
+        errors.append("conditionalFormatting not supported — loop and set format per cell.")
 
     if re.search(r'\.getLastCell\s*\(\s*\)\s*\.getEnd\s*\(', code):
         errors.append(
-            "getEnd() is not a function on Range — getLastCell().getEnd() will throw at runtime. "
-            "To find the last used row: const used = sheet.getUsedRange(); used.load('rowCount'); "
-            "await ctx.sync(); then use `getRange('A2:A' + used.rowCount)`. "
-            "BAD: sheet.getRange('A1').getLastCell().getEnd(Excel.KeyboardDirection.down). "
-            "GOOD: used.rowCount to build the address."
+            "getEnd() does not exist on Range. "
+            "Use: const used=sheet.getUsedRange(); used.load('rowCount'); await ctx.sync(); "
+            "then getRange('A2:A'+used.rowCount)."
         )
 
-    # Data validation: source without leading '=' for cross-sheet list references
     for m in re.finditer(r'source\s*:\s*["\']([^"\'=][^"\']*![^"\']+)["\']', code):
         errors.append(
-            f"Data validation list source must start with '=' for cross-sheet references. "
-            f"BAD: source: '{m.group(1)}'. "
-            f"GOOD: source: '={m.group(1)}' (or better: '=$A$1:$A$5' with absolute refs). "
-            "A plain address causes 'The argument is invalid or missing or has an incorrect format.'"
+            f"dataValidation source must start with '=': use '={m.group(1)}' "
+            "(plain address causes 'argument invalid' error)."
         )
 
     if re.search(r'\.autofit\s*\(\s*\)', code):
-        errors.append(
-            "autofit() is not a function in Office JS — use .format.autofitColumns() instead. "
-            "BAD: range.getEntireColumn().autofit(). "
-            "GOOD: range.getEntireColumn().format.autofitColumns()"
-        )
+        errors.append("No autofit() — use range.getEntireColumn().format.autofitColumns()")
 
-    # Detect range.getRange(...) — getRange is a Worksheet method, not a Range method.
-    # Look for a variable that is likely a range (assigned via getRange/getCell/getUsedRange)
-    # and then has .getRange() called on it.
     range_vars = set(re.findall(
         r'(?:const|let|var)\s+(\w+)\s*=\s*\w+\.(?:getRange|getCell|getUsedRange|getUsedRangeOrNullObject|getEntireColumn|getEntireRow)\b',
         code
     ))
     for var in range_vars:
         if re.search(rf'\b{re.escape(var)}\.getRange\s*\(', code):
-            errors.append(
-                f"range.getRange() is not a function — getRange() belongs to Worksheet, not Range. "
-                f"BAD: {var}.getRange('A1'). GOOD: sheet.getRange('A1')"
-            )
+            errors.append(f"range.getRange() invalid — use sheet.getRange() (getRange is Worksheet-only)")
 
     if re.search(r'\.getRow\s*\(', code):
-        errors.append(
-            "Range.getRow() does not exist in Office JS. "
-            "To format a row use sheet.getRange() with explicit row address. "
-            "BAD: range.getRow(0).format.fill.color. "
-            "GOOD: sheet.getRange('A1:Z1').format.fill.color"
-        )
+        errors.append("range.getRow() does not exist — use sheet.getRange('A1:Z1')")
 
     # Dimension mismatch: detect getRange("A1:Cx") paired with a literal array
     # whose row count visibly doesn't match the range row span.
@@ -141,21 +113,16 @@ def _heuristic_check(code: str) -> ValidationResult:
             i += 1
         if inner_count > 0 and inner_count != range_rows:
             warnings.append(
-                f"Array dimensions may not match range size: range spans {range_rows} row(s) "
-                f"but array has {inner_count} inner array(s). "
-                "Ensure the 2-D array is exactly [rows × cols]."
+                f"Dimension mismatch: range is {range_rows} row(s) but array has {inner_count}."
             )
 
     for m in re.finditer(r'getRange\("([A-Z]+)(\d+):([A-Z]+)(\d+)"\)', code):
         r1, r2 = int(m.group(2)), int(m.group(4))
         if r1 > 1_048_576 or r2 > 1_048_576:
-            errors.append(f"Row index out of Excel bounds in range '{m.group(0)}'")
+            errors.append(f"Row index out of Excel bounds: {m.group(0)}")
 
     if re.search(r'Excel\.run\s*\(\s*(?!async)', code):
-        warnings.append(
-            "Excel.run callback may be missing 'async' keyword — "
-            "use Excel.run(async (ctx) => { … })"
-        )
+        warnings.append("Excel.run callback missing 'async' — use Excel.run(async (ctx) => {…})")
 
     return ValidationResult(valid=len(errors) == 0, errors=errors, warnings=warnings, method="heuristic")
 
@@ -291,22 +258,19 @@ def load_known_fixes() -> dict[str, str]:
 
 
 def mistakes_prompt_hint(max_recent: int = 5) -> str:
-    parts: list[str] = []
-
-    fixes = load_known_fixes()
-    if fixes:
-        parts.append("Known JS mistakes to avoid:")
-        for pattern, fix in fixes.items():
-            parts.append(f"  - {pattern}: {fix}")
-
+    """Return a compact hint of recent runtime JS failures for the LLM prompt.
+    Static rules are already embedded in OfficeJSCode._OFFICE_JS_RULES — don't repeat them here.
+    """
     recent = load_mistakes(limit=max_recent)
-    if recent:
-        parts.append(f"\nRecent JS validation failures (last {len(recent)}):")
-        seen: set[str] = set()
-        for m in recent:
-            key = " | ".join(m.get("errors", []))
-            if key not in seen:
-                seen.add(key)
-                parts.append(f"  [{m['error_type']}] {key}")
+    if not recent:
+        return ""
 
-    return "\n".join(parts) if parts else ""
+    seen: set[str] = set()
+    lines: list[str] = ["Recent JS errors (avoid these):"]
+    for m in recent:
+        key = " | ".join(m.get("errors", []))
+        if key and key not in seen:
+            seen.add(key)
+            lines.append(f"  {key}")
+
+    return "\n".join(lines) if len(lines) > 1 else ""
