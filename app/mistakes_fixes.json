@@ -1,6 +1,6 @@
 {
   "conditionalFormatting": "Not supported — loop and set format per cell.",
-  "Array dimension mismatch": "Range R×C needs R inner arrays of C elements. Note: Merged ranges still require the full original R×C array size.",
+  "Array dimension mismatch": "Range R×C needs R inner arrays of C elements. Merged ranges still require the full original R×C array size.",
   "autofit() instead of autofitColumns()": "Use range.getEntireColumn().format.autofitColumns()",
   "range.getRange()": "getRange() is Worksheet-only — use sheet.getRange('A1')",
   "range.getRow()": "Does not exist — use sheet.getRange('A1:Z1') with explicit address",
@@ -9,7 +9,7 @@
   "Excel.run missing async": "Use Excel.run(async (ctx) => { … await ctx.sync(); })",
   "Missing ctx.sync()": "Call await ctx.sync() before returning to flush queued operations",
   "getLastCell().getEnd()": "getEnd() not on Range — use sheet.getUsedRange()+load('rowCount') for last row",
-  "dataValidation source without '='": "Cross-sheet source must start with '=': source:'=Data!$A$2:$A$6'",
+  "dataValidation source format": "Source must be a range reference starting with '=' (e.g., '=Sheet1!$A$1:$A$5'). Comma-separated strings are not supported.",
   "dataValidation.add() or sheet.dataValidation": "Use: rng.dataValidation.rule={list:{inCellDropDown:true,source:'=Sheet!$A$1:$A$5'}}",
   "VLOOKUP formula on multi-row range": "Assign one formula per row: range.formulas=rows.map((_,i)=>[`=VLOOKUP(D${i+2},…)`])",
   "load() after ctx.sync()": "Call range.load('values') BEFORE ctx.sync()",
