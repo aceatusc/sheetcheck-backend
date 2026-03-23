@@ -241,14 +241,13 @@ class RubricHint(BaseModel):
 
 class GenerateSegments(dspy.Signature):
     """
-    Generate fine-grained Office JS segments that fully accomplish what user wants according to the workbook context.
-    One concern per segment — data, formulas, header style, row style, totals,
-    colour-coding, dropdowns, autofit, etc. 5-15 segments is typical; more is better.
-    Every tweakable constant goes in parameters[].
+    Generate focused fine-grained Office JS segments (5-15 segments is typical; more is better)
+    for the user request according to workbook context.
+    Never overwrite existing data or formatting in `ws_context` unless user is asking for instructed.
     """
-    user_message: str              = dspy.InputField(desc="What the user wants")
-    ws_context:   WorksheetContext = dspy.InputField(desc="Full workbook state")
-    js_hint:      str              = dspy.InputField(desc="Recent JS errors to avoid")
+    user_message: str              = dspy.InputField(desc="User request")
+    ws_context:   WorksheetContext = dspy.InputField(desc="Current workbook state (Used to avoid collisions)")
+    js_hint:      str              = dspy.InputField(desc="JS errors to avoid")
     chat_history: list[str]        = dspy.InputField(desc="Conversation context")
 
     result: SegmentList = dspy.OutputField()
