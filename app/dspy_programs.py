@@ -286,8 +286,7 @@ class GenerateSegments(dspy.Signature):
 class EditSegments(dspy.Signature):
     """
     Modify the given segment based on user feedback, then regenerate all downstream
-    segments so they remain consistent. Output exactly 1 + len(remaining_segments)
-    segments: the edited segment first, then the regenerated remainder in order.
+    segments so they remain consistent. Output the edited segment first, then the regenerated remainder in order.
 
     Preserve or increase granularity — do not collapse steps.
     Follow all rules in js_hint exactly — they list known runtime errors to avoid.
