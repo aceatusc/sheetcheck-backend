@@ -318,12 +318,12 @@ class AnswerQuestion(dspy.Signature):
 
 class ScaffoldAspects(dspy.Signature):
     """
-    Given the user's chat history and current worksheet state, identify 3-6
+    Given the user's chat history and current worksheet state, identify
     *important aspects* the user should verify about the task.
 
     Aspects are thought-provoking dimensions that help the user overcome blind spots and hidden assumptions.
-    Write each as a concise, specific, actionable question or check
-    (e.g. "Are column headers consistent with the existing sheet naming convention?").
+    Write each as a concise, specific, actionable item or verification
+    (e.g. "Column headers should be consistent with the existing sheet naming convention").
     Focus on things the user might not have explicitly mentioned but that matter
     for the task (unknown unknowns, common spreadsheet agents pitfalls, data integrity).
     """
