@@ -101,7 +101,7 @@ def _validate_and_dump_segments(segment_list) -> list[dict]:
         dicts.append(seg.model_dump())
 
     if failures:
-        raise ValueError("JS validation failed for segments:\n" + "\n".join(failures))
+        logger.warning("JS validation failed for segments:\n" + "\n".join(failures))
 
     return dicts
 

@@ -270,6 +270,7 @@ class GenerateSegments(dspy.Signature):
     Each segment: self-contained, single concern, clear explanation, 2-3 Q&A pairs,
     all tweakable constants as parameters[]. For column sizing always use
     range.getEntireColumn().format.autofitColumns() — never .autofit().
+    Always call sheet.getRange() not range.getRange() — getRange() is a Worksheet method only.
 
     Follow all rules in js_hint exactly — they list known runtime errors to avoid.
     """
