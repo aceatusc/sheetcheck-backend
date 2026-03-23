@@ -92,6 +92,14 @@ def _heuristic_check(code: str) -> ValidationResult:
                 f"BAD: {var}.getRange('A1'). GOOD: sheet.getRange('A1')"
             )
 
+    if re.search(r'\.getRow\s*\(', code):
+        errors.append(
+            "Range.getRow() does not exist in Office JS. "
+            "To format a row use sheet.getRange() with explicit row address. "
+            "BAD: range.getRow(0).format.fill.color. "
+            "GOOD: sheet.getRange('A1:Z1').format.fill.color"
+        )
+
     # Dimension mismatch: detect getRange("A1:Cx") paired with a literal array
     # whose row count visibly doesn't match the range row span.
     for m in re.finditer(
@@ -224,7 +232,7 @@ def validate_segments(segments: list[dict]) -> list[dict]:
             logger.warning("[%s] JS warnings: %s", seg_id, "; ".join(vr.warnings))
 
     if failures:
-        logger.warning("JS validation failed for segments:\n" + "\n".join(failures))
+        raise ValueError("JS validation failed for segments:\n" + "\n".join(failures))
     return segments
 
 

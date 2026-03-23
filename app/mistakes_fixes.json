@@ -3,6 +3,7 @@
   "Array dimensions do not match range size": "Count range rows×cols carefully. A range of R rows × C cols needs a 2-D array of exactly R inner arrays each with C elements. BAD: 2-row range with [[a,b],[c,d],[e,f]]. GOOD: [[a,b],[c,d]]",
   "autofit() called instead of autofitColumns()": "The correct method is autofitColumns(), not autofit(). BAD: range.getEntireColumn().autofit(). GOOD: range.getEntireColumn().format.autofitColumns()",
   "getRange called on a Range object instead of a Worksheet": "getRange() is a Worksheet method, not a Range method. BAD: range.getRange('A1'). GOOD: sheet.getRange('A1')",
+  "getRow() used to access row formatting": "Range has no getRow() method. To format a specific row use sheet.getRange('A'+rowNum+':Z'+rowNum) or index into the range with getCell(rowIndex, colIndex). BAD: range.getRow(0).fill.color. GOOD: sheet.getRange('A1:Z1').format.fill.color",
   "numberFormat assigned plain string on multi-cell range": "Wrap in a 2-D array matching the range dimensions: range.numberFormat = [['$#,##0','$#,##0'],['$#,##0','$#,##0']]",
   "values assigned 1-D array": "Excel JS API requires a 2-D array: range.values = [['a','b'],['c','d']]",
   "Excel.run callback missing async": "Always use: Excel.run(async (ctx) => { ... await ctx.sync(); })",
