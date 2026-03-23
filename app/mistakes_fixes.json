@@ -10,5 +10,9 @@
   "Missing await ctx.sync()": "Call await ctx.sync() at least once before the function returns to flush all queued operations",
   "getRange with hard-coded very large row numbers": "Avoid row numbers > 1048576; use dynamic range addressing instead",
   "forEach loop with multiple ctx.sync inside": "Batch all range operations first, then call ctx.sync() once at the end — multiple syncs inside a loop are slow and error-prone",
-  "load() called after ctx.sync()": "Call range.load('values') BEFORE ctx.sync(); values are only populated after the sync"
+  "load() called after ctx.sync()": "Call range.load('values') BEFORE ctx.sync(); values are only populated after the sync",
+  "getLastCell().getEnd() called": "getEnd() is not a function on Range. To find the last used row dynamically: const used = sheet.getUsedRange(); used.load('rowCount'); await ctx.sync(); const lastRow = used.rowCount; then use getRange(`A2:A${lastRow}`). BAD: sheet.getRange('A1').getLastCell().getEnd(Excel.KeyboardDirection.down). GOOD: use usedRange.rowCount.",
+  "data validation list with plain address source": "The source for a list rule that references another sheet MUST start with '='. BAD: source: 'Data!A2:A6'. GOOD: source: '=Data!$A$2:$A$6'. A plain address string causes 'The argument is invalid or missing or has an incorrect format.'",
+  "dataValidation.add() or sheet.dataValidation used": "Use the Ranges API for data validation: rng.dataValidation.rule = { list: { inCellDropDown: true, source: '=Sheet!$A$1:$A$5' } }; await ctx.sync();  — never call .add() or access dataValidation on the sheet object.",
+  "VLOOKUP formula array assigned to multi-row range": "When writing a formula that should fill N rows, assign it as a 2-D array with one formula per row. BAD: range.formulas = [['=VLOOKUP(D2,Data!$A$2:$B$6,2,FALSE)']]. GOOD: range.formulas = rows.map((_,i) => [`=VLOOKUP(D${i+2},Data!$A$2:$B$6,2,FALSE)`]);"
 }

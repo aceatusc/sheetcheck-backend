@@ -71,6 +71,24 @@ def _heuristic_check(code: str) -> ValidationResult:
             "Apply formatting explicitly in a loop instead."
         )
 
+    if re.search(r'\.getLastCell\s*\(\s*\)\s*\.getEnd\s*\(', code):
+        errors.append(
+            "getEnd() is not a function on Range — getLastCell().getEnd() will throw at runtime. "
+            "To find the last used row: const used = sheet.getUsedRange(); used.load('rowCount'); "
+            "await ctx.sync(); then use `getRange('A2:A' + used.rowCount)`. "
+            "BAD: sheet.getRange('A1').getLastCell().getEnd(Excel.KeyboardDirection.down). "
+            "GOOD: used.rowCount to build the address."
+        )
+
+    # Data validation: source without leading '=' for cross-sheet list references
+    for m in re.finditer(r'source\s*:\s*["\']([^"\'=][^"\']*![^"\']+)["\']', code):
+        errors.append(
+            f"Data validation list source must start with '=' for cross-sheet references. "
+            f"BAD: source: '{m.group(1)}'. "
+            f"GOOD: source: '={m.group(1)}' (or better: '=$A$1:$A$5' with absolute refs). "
+            "A plain address causes 'The argument is invalid or missing or has an incorrect format.'"
+        )
+
     if re.search(r'\.autofit\s*\(\s*\)', code):
         errors.append(
             "autofit() is not a function in Office JS — use .format.autofitColumns() instead. "

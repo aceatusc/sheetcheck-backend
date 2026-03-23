@@ -102,9 +102,28 @@ class ChartInfo(BaseModel):
     title:      Optional[str]       = None
 
 
+class SheetInfo(BaseModel):
+    """Data for a single worksheet (used in allSheets list)."""
+    model_config = ConfigDict(extra="allow")
+    name:      str                       = Field(description="Worksheet tab name")
+    address:   Optional[str]             = None
+    values:    Optional[list[list[Any]]] = None
+    rowCount:  Optional[int]             = None
+    colCount:  Optional[int]             = None
+    truncated: Optional[bool]            = Field(default=False, description="True when the sheet was too large and only the first shownRows rows are included")
+    shownRows: Optional[int]             = None
+    error:     Optional[str]             = None
+
+
 class SheetData(BaseModel):
     model_config = ConfigDict(extra="allow")
     usedRange: Optional[UsedRange]    = None
+    allSheets: Optional[list[SheetInfo]] = Field(default=None,
+        description=(
+            "Data from ALL worksheets in the workbook. "
+            "Use this to understand cross-sheet references (e.g. VLOOKUP into a Data sheet). "
+            "The active sheet is always present in full; other sheets may be truncated."
+        ))
     styles:    Optional[list[CellStyle]] = Field(default=None,
         description="Sampled cell styles — one entry per distinct formatted region")
     charts:    Optional[list[ChartInfo]] = Field(default=None,
@@ -122,8 +141,8 @@ class WorksheetContext(BaseModel):
 # -- Segment models -----------------------------------------------------------
 
 class QAPair(BaseModel):
-    q: str = Field(description="A 'Why ...?' design question about this step")
-    a: str = Field(description="A concise answer explaining the design choice")
+    q: str = Field(description="A 'Why ...?' question about this step as the user sees it in the sheet (e.g. 'Why does column D show a dropdown?', 'Why does B3 contain a formula?') — never reference JavaScript or code")
+    a: str = Field(description="A concise answer explaining the design choice in plain terms — describe cell addresses, formula bar contents, visible values; no code references")
 
 
 class SegmentParameter(BaseModel):
@@ -138,14 +157,44 @@ class OfficeJSCode(BaseModel):
     """
     A single self-contained Office JS snippet.
 
-    MUST follow these rules — violations cause runtime errors:
+    MUST follow these rules exactly — violations cause runtime errors:
+
+    STRUCTURE
     - Wrap in: await Excel.run(async (ctx) => { ... await ctx.sync(); });
-    - NEVER use .conditionalFormatting — not supported. Use explicit per-cell formatting in a loop.
-    - .values / .numberFormat / .formulas ALWAYS take a 2-D array sized to match the range exactly.
-      Single cell: [[value]]. Single column of N: [[v1],[v2],...]. Single row of N: [[v1,v2,...]].
+    - Always use `async` in the Excel.run callback.
+
+    RANGES & ARRAYS
+    - .values / .numberFormat / .formulas ALWAYS take a 2-D array sized exactly to the range.
+      Single cell: [[value]]. Column of N rows: [[v1],[v2],...]. Row of N cols: [[v1,v2,...]].
+    - getRange address must exactly match the array dimensions (rows × cols). Count rows and cols
+      before assigning — a mismatch causes "The number of rows or columns in the input array
+      doesn't match the size or dimensions of the range."
     - NEVER read .values/.formulas without load() + await ctx.sync() first.
     - NEVER load() and write to the same range in one sync block.
-    - getRange address must exactly match the array dimensions (rows × cols).
+
+    DATA VALIDATION (DROPDOWN LISTS)
+    - To add a dropdown/list validation use the Ranges API, NOT the old DataValidation API:
+        const rng = sheet.getRange("D2:D50");
+        rng.dataValidation.rule = {
+            list: { inCellDropDown: true, source: "=Data!$A$2:$A$6" }
+        };
+        await ctx.sync();
+    - NEVER use sheet.dataValidation or range.dataValidation.add() — they do not exist.
+    - The `source` string for a list rule that references another sheet MUST be a formula
+      string starting with "=" e.g. "=Data!$A$2:$A$6". A plain address like "Data!A2:A6"
+      causes "The argument is invalid or missing or has an incorrect format."
+
+    RANGE NAVIGATION
+    - getRange() is a Worksheet method ONLY. Call sheet.getRange('A1'), never range.getRange('A1').
+    - Range.getLastCell() returns a Range — it has NO .getEnd() method. To get the last used row
+      dynamically, load the usedRange rowCount and compute the address from that:
+        const used = sheet.getUsedRange(); used.load('rowCount'); await ctx.sync();
+        const lastRow = used.rowCount;  // then use getRange(`A2:A${lastRow}`)
+    - Range.getRow() does not exist. Access rows via sheet.getRange('A1:Z1').
+    - NEVER call range.getLastCell().getEnd(...) — getEnd is not a function on Range.
+
+    FORMATTING
+    - NEVER use .conditionalFormatting — not supported. Use explicit per-cell formatting in a loop.
     - Column autofit: range.getEntireColumn().format.autofitColumns() — NEVER .autofit().
     - Call autofitColumns() AFTER all data and formatting is written.
     """
@@ -210,8 +259,8 @@ class StepSummary(BaseModel):
 
 
 class AskAnswer(BaseModel):
-    answer:              str       = Field(description="Clear, concise answer in 1-3 sentences")
-    follow_up_questions: list[str] = Field(description="2 short suggested follow-up questions")
+    answer:              str       = Field(description="Clear, concise answer in 1-3 sentences — describe what the user sees in the sheet (cell addresses, formula bar, visible values), never mention JavaScript or code")
+    follow_up_questions: list[str] = Field(description="2 short suggested follow-up questions about what the user sees or how the result works in the sheet — no code references")
 
 
 # -- Aspects (replaces Rubric) ------------------------------------------------
@@ -304,13 +353,23 @@ class EditSegments(dspy.Signature):
 
 class AnswerQuestion(dspy.Signature):
     """
-    Answer a follow-up question about a specific step in a spreadsheet
-    automation plan. Be concise and suggest natural follow-up questions.
+    Answer a follow-up question about a specific step in a spreadsheet automation plan.
+
+    CRITICAL: The user is looking at their Excel sheet — they cannot see any JavaScript code.
+    Frame every answer in terms of what the user observes in the sheet:
+      - Cell addresses and range addresses (e.g. "column D", "row 3", "B2:B50")
+      - Formula strings as they appear in the formula bar (e.g. =VLOOKUP(D2,Data!$A$2:$B$6,2,FALSE))
+      - Visible values, text, formatting, dropdown options
+      - Sheet tab names
+    NEVER reference variable names, function names, or any JavaScript/code concepts.
+
+    Be concise (1-3 sentences per answer). Suggest 2 natural follow-up questions that
+    stay within the same "what does the user see / how does it work in the sheet" framing.
     """
-    user_message:  str              = dspy.InputField(desc="The user's question")
-    ws_context:    WorksheetContext = dspy.InputField(desc="Current worksheet state")
+    user_message:  str              = dspy.InputField(desc="The user's question about what they see in their sheet")
+    ws_context:    WorksheetContext = dspy.InputField(desc="Current worksheet state including all sheet data")
     current_step:  StepSummary      = dspy.InputField(desc="Description and explanation of the step being asked about")
-    history:       list[dict]       = dspy.InputField(desc="Prior conversation turns [{q, a}] (may be empty)")
+    history:       list[dict]       = dspy.InputField(desc="Prior Q&A turns [{q, a}] in this ask session (may be empty)")
     chat_history:  list[str]        = dspy.InputField(desc="Recent user messages for context (oldest first, may be empty)")
 
     result: AskAnswer = dspy.OutputField()
@@ -318,14 +377,18 @@ class AnswerQuestion(dspy.Signature):
 
 class ScaffoldAspects(dspy.Signature):
     """
-    Given the user's chat history and current worksheet state, identify
+    Given the user's chat history and current workbook state, identify
     *important aspects* the user should verify about the task.
 
     Aspects are thought-provoking dimensions that help the user overcome blind spots and hidden assumptions.
-    Write each as a concise, specific, actionable item or verification
+    Write each as a concise, specific, actionable verification
     (e.g. "Column headers should be consistent with the existing sheet naming convention").
     Focus on things the user might not have explicitly mentioned but that matter
-    for the task (unknown unknowns, common spreadsheet agents pitfalls, data integrity).
+    for the task (unknown unknowns, common spreadsheet pitfalls, data integrity,
+    cross-sheet formula correctness, dropdown list sources).
+
+    ws_context.sheetData.allSheets contains data from every worksheet tab —
+    use it to notice cross-sheet dependencies the user may have overlooked.
     """
     user_message:  str              = dspy.InputField(desc="The user's original task description")
     ws_context:    WorksheetContext = dspy.InputField(desc="Current full worksheet state")
@@ -336,13 +399,20 @@ class ScaffoldAspects(dspy.Signature):
 
 class VerifyAspects(dspy.Signature):
     """
-    Evaluate whether the current worksheet satisfies each aspect.
-    Be precise about cell references and give one-sentence reasoning per item.
-    Cover every aspect in the list.
+    Evaluate whether the current workbook satisfies each aspect.
+
+    Use ALL available context:
+    - ws_context.sheetData.allSheets contains data from every worksheet tab —
+      check cross-sheet references and data that may live outside the active sheet.
+    - chat_history contains the full conversation: what the user asked for, what
+      was applied, and any corrections — use it to understand the intended outcome.
+    - Be precise about cell references (include sheet name for non-active sheets,
+      e.g. 'Data!A2:B6') and give one-sentence reasoning per item.
+    - Cover every aspect in the list — do not skip any.
     """
     aspects:      AspectList       = dspy.InputField(desc="The aspects to evaluate against")
-    ws_context:   WorksheetContext = dspy.InputField(desc="Current worksheet state")
-    chat_history: list[str]        = dspy.InputField(desc="Recent user messages for context (oldest first, may be empty)")
+    ws_context:   WorksheetContext = dspy.InputField(desc="Full workbook state — all worksheets via sheetData.allSheets")
+    chat_history: list[str]        = dspy.InputField(desc="Full conversation history (oldest first) — what the user asked for and what was done")
 
     result: VerifyResultList = dspy.OutputField()
 
