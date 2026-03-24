@@ -118,22 +118,19 @@ class SegmentParameter(BaseModel):
 # Office JS rules injected into the code field description so the LLM sees them
 # exactly once, at the point of generation — not duplicated in every signature.
 _OFFICE_JS_RULES = (
-    "Office JS snippet. Rules: "
-    "(1) await Excel.run(async (ctx) => { ...; await ctx.sync(); }); "
-    "(2) DIMENSIONS: .values/.formulas/.numberFormat REQUIRE 2-D arrays matching range size. "
-    "A 1x6 range (e.g., A1:F1) MUST have [[v,'','','','','']]. Merged ranges still require the "
-    "original full dimension array. "
-    "(3) BORDERS: No 'EdgeAround'. Use range.format.borders.getItem(e) where e is "
-    "['EdgeTop','EdgeBottom','EdgeLeft','EdgeRight'] in a loop. "
-    "(4) SINGLE CELLS: For one cell in a range, use range.getCell(row, col).numberFormat = '$#'; "
-    "Note: .getCell() takes a string/number, not an array. "
-    "(5) METHODS: sheet.getRange() only—never range.getRange(). No range.getRow()—use sheet.getRange('A1:Z1'). "
-    "(6) UTILS: No getLastCell().getEnd()—use sheet.getUsedRange()+load('rowCount') for last row. "
-    "(7) DROPDOWNS: rng.dataValidation.rule={list:{inCellDropDown:true,source:'=Sheet!$A$1:$A$5'}}. "
-    "Source MUST be a range string starting with '=', no comma-separated strings. "
-    "(8) FORMATTING: No .conditionalFormatting—loop and set format per cell. "
-    "(9) AUTOFIT: range.getEntireColumn().format.autofitColumns() after writing data. "
-    "(10) SYNC: load() before ctx.sync(); never load and write same range in one sync block."
+    "A single self-contained snippet wrapped in: "
+    "await Excel.run(async (ctx) => { ...; await ctx.sync(); }); "
+    "Rules: (1) DIMENSIONS: .values/.formulas/.numberFormat REQUIRE 2-D arrays. "
+    "Merged ranges (e.g. A1:F1) MUST use full original size: [[v,'','','','','']]. "
+    "(2) BORDERS: No 'EdgeAround'. Loop ['EdgeTop','EdgeBottom','EdgeLeft','EdgeRight'] "
+    "with range.format.borders.getItem(e). (3) SINGLE CELLS: Use "
+    "range.getCell(r,c).numberFormat = '$#' (string, not array). "
+    "(4) WORKSHEET ONLY: Use sheet.getRange(), never range.getRange(). "
+    "(5) LAST ROW: No .getEnd(); use sheet.getUsedRange().load('rowCount'). "
+    "(6) DROPDOWNS: rng.dataValidation.rule={list:{inCellDropDown:true,source:'=Sheet!$A$1'}}. "
+    "Source must start with '='. (7) NO CONDITIONAL FORMATS: Loop and set formats manually. "
+    "(8) AUTOFIT: Use range.getEntireColumn().format.autofitColumns(). "
+    "(9) SYNC: load() BEFORE ctx.sync(). Never load and write the same range in one sync."
 )
 
 
