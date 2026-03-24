@@ -209,9 +209,9 @@ class AspectList(BaseModel):
 
 class VerifyResult(BaseModel):
     id:         str       = Field(description="Aspect ID")
-    met:        bool      = Field(description="Whether the sheet satisfies this aspect")
+    met:        bool      = Field(description="Whether the workbook satisfies this aspect")
     reasoning:  str       = Field(description="One sentence explanation")
-    references: list[str] = Field(description="Supporting cell ranges e.g. ['A1:E1']")
+    references: list[str] = Field(description="Supporting cell ranges e.g. ['Sheet1!A1:B10', \"'Monthly Sales'!C5\"]")
 
 
 class VerifyResultList(BaseModel):
