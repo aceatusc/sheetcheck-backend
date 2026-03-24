@@ -103,8 +103,8 @@ class WorksheetContext(BaseModel):
 # ---------------------------------------------------------------------------
 
 class QAPair(BaseModel):
-    q: str = Field(description="'Why …?' question in sheet terms (cells/formulas/values), not code")
-    a: str = Field(description="Concise answer — addresses, formula bar, visible output")
+    q: str = Field(description="A 'Why ...?' design question about this step without mentioning code")
+    a: str = Field(description="A concise answer explaining the design choice")
 
 
 class SegmentParameter(BaseModel):
@@ -190,8 +190,8 @@ class StepSummary(BaseModel):
 
 
 class AskAnswer(BaseModel):
-    answer:              str       = Field(description="1-3 sentences in sheet terms — cells, formulas, visible values; no code")
-    follow_up_questions: list[str] = Field(description="2 follow-up questions about what the user sees")
+    answer:              str       = Field(description="Clear, concise answer in 1-3 sentences")
+    follow_up_questions: list[str] = Field(description="2 short suggested follow-up questions")
 
 
 # ---------------------------------------------------------------------------
