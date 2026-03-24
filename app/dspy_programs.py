@@ -120,11 +120,10 @@ class SegmentParameter(BaseModel):
 _OFFICE_JS_RULES = (
     "A single self-contained snippet wrapped in: "
     "await Excel.run(async (ctx) => { ...; await ctx.sync(); }); "
-    "Rules: (1) DIMENSIONS: .values/.formulas/.numberFormat REQUIRE 2-D arrays. "
-    "Merged ranges (e.g. A1:F1) MUST use full original size: [[v,'','','','','']]. "
-    "(2) BORDERS: No 'EdgeAround'. Loop ['EdgeTop','EdgeBottom','EdgeLeft','EdgeRight'] "
-    "with range.format.borders.getItem(e). (3) SINGLE CELLS: Use "
-    "range.getCell(r,c).numberFormat = '$#' (string, not array). "
+    "Rules: (1) DIMENSIONS: .values/.formulas/.numberFormat MUST match range size exactly. "
+    "For multi-row ranges (e.g., F2:F10), use Array(numRows).fill([value]) to ensure "
+    "the input array matches the row count. Merged ranges (A1:F1) require [[v,'','','','','']]. "
+    "(3) SINGLE CELLS: Use range.getCell(r,c).numberFormat = '$#' (string, not array). "
     "(4) WORKSHEET ONLY: Use sheet.getRange(), never range.getRange(). "
     "(5) LAST ROW: No .getEnd(); use sheet.getUsedRange().load('rowCount'). "
     "(6) DROPDOWNS: rng.dataValidation.rule={list:{inCellDropDown:true,source:'=Sheet!$A$1'}}. "
@@ -132,6 +131,7 @@ _OFFICE_JS_RULES = (
     "(8) AUTOFIT: Use range.getEntireColumn().format.autofitColumns(). "
     "(9) SYNC: load() BEFORE ctx.sync(). Never load and write the same range in one sync."
 )
+
 
 
 class OfficeJSCode(BaseModel):
