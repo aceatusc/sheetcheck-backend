@@ -18,9 +18,9 @@ logger = logging.getLogger(__name__)
 MAX_TOKENS: dict[str, int] = {
     "code":            64_000,
     "edit":            32_000,
-    "ask":              2_000,
-    "rubric_scaffold":  8_000,
-    "rubric_verify":    8_000,
+    "ask":              4_000,
+    "rubric_scaffold":  16_000,
+    "rubric_verify":    16_000,
     "chat":             2_000,
 }
 _DEFAULT_MAX_TOKENS = 8_096
