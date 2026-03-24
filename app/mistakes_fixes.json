@@ -1,17 +1,19 @@
 {
   "conditionalFormatting": "Not supported — loop and set format per cell.",
-  "Array dimension mismatch": "Range R×C needs R inner arrays of C elements. Merged ranges still require the full original R×C array size.",
+  "Array dimension mismatch": "Range R×C needs R inner arrays of C elements. Merged ranges still require the full original R×C array size (e.g. A1:F1 is [[v,'','','','','']]).",
+  "EdgeAround Border Error": "Property 'EdgeAround' is not supported in getItem(). Loop through ['EdgeTop', 'EdgeBottom', 'EdgeLeft', 'EdgeRight'] instead.",
+  "numberFormat on Single Cell vs Range": "On a single cell (via getCell), use a string: '0.00'. On a Range, use a 2-D array: [['0.00','0.00']].",
   "autofit() instead of autofitColumns()": "Use range.getEntireColumn().format.autofitColumns()",
   "range.getRange()": "getRange() is Worksheet-only — use sheet.getRange('A1')",
   "range.getRow()": "Does not exist — use sheet.getRange('A1:Z1') with explicit address",
-  "numberFormat plain string on multi-cell range": "Use 2-D array: range.numberFormat=[['$#,##0','$#,##0'],…]",
+  "numberFormat plain string on multi-cell range": "Use 2-D array: range.numberFormat=[['$#,##0','$#,##0'],...]",
   "values 1-D array": "Use 2-D array: range.values=[['a','b'],['c','d']]",
-  "Excel.run missing async": "Use Excel.run(async (ctx) => { … await ctx.sync(); })",
+  "Excel.run missing async": "Use Excel.run(async (ctx) => { ... await ctx.sync(); })",
   "Missing ctx.sync()": "Call await ctx.sync() before returning to flush queued operations",
   "getLastCell().getEnd()": "getEnd() not on Range — use sheet.getUsedRange()+load('rowCount') for last row",
   "dataValidation source format": "Source must be a range reference starting with '=' (e.g., '=Sheet1!$A$1:$A$5'). Comma-separated strings are not supported.",
   "dataValidation.add() or sheet.dataValidation": "Use: rng.dataValidation.rule={list:{inCellDropDown:true,source:'=Sheet!$A$1:$A$5'}}",
-  "VLOOKUP formula on multi-row range": "Assign one formula per row: range.formulas=rows.map((_,i)=>[`=VLOOKUP(D${i+2},…)`])",
+  "VLOOKUP formula on multi-row range": "Assign one formula per row: range.formulas=rows.map((_,i)=>[ `=VLOOKUP(D${i+2},...)` ])",
   "load() after ctx.sync()": "Call range.load('values') BEFORE ctx.sync()",
   "forEach with multiple ctx.sync": "Batch all operations first, then one ctx.sync() at the end"
 }

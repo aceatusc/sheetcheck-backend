@@ -119,18 +119,21 @@ class SegmentParameter(BaseModel):
 # exactly once, at the point of generation — not duplicated in every signature.
 _OFFICE_JS_RULES = (
     "Office JS snippet. Rules: "
-    "(1) await Excel.run(async (ctx) => { …; await ctx.sync(); }); "
-    "(2) .values/.formulas/.numberFormat need a 2-D array matching range dims: "
-    "[[v]] for 1x1, [[v1,v2]] for 1x2. Note: merged ranges (e.g., A1:F1) still require "
-    "the full original width: [[v,'','','','','']]; "
-    "(3) sheet.getRange() only — never range.getRange(); "
-    "(4) no range.getRow() — use sheet.getRange('A1:Z1'); "
-    "(5) no getLastCell().getEnd() — use sheet.getUsedRange()+load('rowCount') for last row; "
-    "(6) dropdown: rng.dataValidation.rule={list:{inCellDropDown:true,source:'=Sheet!$A$1:$A$5'}} "
-    "— source MUST be a range string starting with '=', no comma-separated strings; "
-    "(7) no .conditionalFormatting — loop and set format per cell; "
-    "(8) autofitColumns: range.getEntireColumn().format.autofitColumns() after writing data; "
-    "(9) load() before ctx.sync(); never load and write same range in one sync block."
+    "(1) await Excel.run(async (ctx) => { ...; await ctx.sync(); }); "
+    "(2) DIMENSIONS: .values/.formulas/.numberFormat REQUIRE 2-D arrays matching range size. "
+    "A 1x6 range (e.g., A1:F1) MUST have [[v,'','','','','']]. Merged ranges still require the "
+    "original full dimension array. "
+    "(3) BORDERS: No 'EdgeAround'. Use range.format.borders.getItem(e) where e is "
+    "['EdgeTop','EdgeBottom','EdgeLeft','EdgeRight'] in a loop. "
+    "(4) SINGLE CELLS: For one cell in a range, use range.getCell(row, col).numberFormat = '$#'; "
+    "Note: .getCell() takes a string/number, not an array. "
+    "(5) METHODS: sheet.getRange() only—never range.getRange(). No range.getRow()—use sheet.getRange('A1:Z1'). "
+    "(6) UTILS: No getLastCell().getEnd()—use sheet.getUsedRange()+load('rowCount') for last row. "
+    "(7) DROPDOWNS: rng.dataValidation.rule={list:{inCellDropDown:true,source:'=Sheet!$A$1:$A$5'}}. "
+    "Source MUST be a range string starting with '=', no comma-separated strings. "
+    "(8) FORMATTING: No .conditionalFormatting—loop and set format per cell. "
+    "(9) AUTOFIT: range.getEntireColumn().format.autofitColumns() after writing data. "
+    "(10) SYNC: load() before ctx.sync(); never load and write same range in one sync block."
 )
 
 

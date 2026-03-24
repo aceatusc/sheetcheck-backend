@@ -117,8 +117,6 @@ def generate_segments(
     from js_validator import mistakes_prompt_hint
     from dspy_programs import RubricHint
 
-    print(ws_context)
-    print(_make_ws_context(ws_context))
     result = call_program(
         "code",
         user_message=user_message,
