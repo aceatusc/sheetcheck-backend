@@ -188,12 +188,7 @@ STUB_SEGMENTS = [
 
 STUB_RUBRIC = {
     "aspects": [
-        {"id": "a1", "label": "Header row is present and all column labels are correct"},
-        {"id": "a2", "label": "All 6 months of data are filled in rows 2–7"},
-        {"id": "a3", "label": "Currency format is applied to Revenue, Expenses, and Profit"},
-        {"id": "a4", "label": "Visual hierarchy clearly differentiates headers from data rows"},
-        {"id": "a5", "label": "Growth % column reflects the correct month-over-month direction"},
-        {"id": "a6", "label": "Column widths are readable without horizontal scrolling"},
+        {"id": "a1", "label": "Verify if ..."},
     ],
 }
 
