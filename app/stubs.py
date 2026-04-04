@@ -58,8 +58,8 @@ STUB_PNL = [
         "code": "await Excel.run(async (ctx) => { const s=ctx.workbook.worksheets.getActiveWorksheet(); s.getRange('E3:E7').formulas=[['=IFERROR((D3-D2)/D2,\"\")'],['=IFERROR((D4-D3)/D3,\"\")'],['=IFERROR((D5-D4)/D4,\"\")'],['=IFERROR((D6-D5)/D5,\"\")'],['=IFERROR((D7-D6)/D6,\"\")']];\ns.getRange('E3:E7').numberFormat=[['0.0%'],['0.0%'],['0.0%'],['0.0%'],['0.0%']]; await ctx.sync(); });",
         "formula_info": {
             "name": "IFERROR",
-            "description": "Evaluates an expression and returns its result if it succeeds, or a fallback value if the expression produces an error. Used here to suppress divide-by-zero errors when calculating month-over-month growth.",
-            "example": "=IFERROR((D3-D2)/D2, \"\")"
+            "example": "=IFERROR((D3-D2)/D2, \"\")",
+            "description": "IFERROR(value, value_if_error) runs the first argument and returns the second if it errors. Here (D3-D2)/D2 computes profit growth from the previous month — if D2 is zero the division would error, so IFERROR returns an empty string instead.",
         },
     },
     {
@@ -113,8 +113,8 @@ STUB_PNL = [
         "code": 'await Excel.run(async (ctx) => { const s=ctx.workbook.worksheets.getActiveWorksheet(); s.getRange("A8").values=[["TOTAL"]]; s.getRange("B8:D8").formulas=[["=SUM(B2:B7)","=SUM(C2:C7)","=SUM(D2:D7)"]]; s.getRange("B8:D8").numberFormat=[["$#,##0","$#,##0","$#,##0"]]; const t=s.getRange("A8:E8"); t.format.fill.color="#1a1d27"; t.format.font.color="#ffffff"; t.format.font.bold=true; s.getRange("A1:E8").getEntireColumn().format.autofitColumns(); await ctx.sync(); });',
         "formula_info": {
             "name": "SUM",
-            "description": "Adds all numbers in a range of cells. Used here to total Revenue, Expenses, and Profit across the six monthly rows.",
-            "example": "=SUM(B2:B7)"
+            "example": "=SUM(B2:B7)",
+            "description": "SUM(number1, [number2], ...) adds all values in the given range. Here B2:B7 spans the six monthly Revenue figures, so the result is the full six-month total placed in the TOTAL row.",
         },
     },
 ]
@@ -201,8 +201,8 @@ STUB_SALES = [
         "code": 'await Excel.run(async (ctx) => { const s=ctx.workbook.worksheets.getActiveWorksheet(); for(let i=2;i<=8;i++){ s.getRange("E"+i).formulas=[["=ROUND(C"+i+"*D"+i+",2)"]]; } s.getRange("C2:C8").numberFormat="$#,##0"; s.getRange("E2:E8").numberFormat="$#,##0.00"; await ctx.sync(); });',
         "formula_info": {
             "name": "ROUND",
-            "description": "Rounds a number to a specified number of decimal places. Used here to calculate tax owed to the cent, preventing the floating-point errors that bare multiplication can introduce.",
-            "example": "=ROUND(C2*D2, 2)"
+            "example": "=ROUND(C2*D2, 2)",
+            "description": "ROUND(number, num_digits) rounds the first argument to the number of decimal places given by the second. Here C2*D2 multiplies Gross Amount by Tax Rate, and 2 rounds the result to cents — preventing the tiny floating-point errors that bare multiplication can accumulate.",
         },
     },
     {
@@ -238,8 +238,8 @@ STUB_SALES = [
         "code": 'await Excel.run(async (ctx) => { const s=ctx.workbook.worksheets.getActiveWorksheet(); s.getRange("H3").values=[["SUMMARY"]]; s.getRange("H3:I3").format.fill.color="#1a2744"; s.getRange("H3:I3").format.font.color="#f5c842"; s.getRange("H3:I3").format.font.bold=true; s.getRange("H4:I4").values=[["Total Income","=SUM(C2:C8)"]]; s.getRange("H5:I5").values=[["Total Tax Owed","=SUM(E2:E8)"]]; s.getRange("H6:I6").values=[["Effective Rate","=I5/I4"]]; s.getRange("I4:I5").numberFormat="$#,##0.00"; s.getRange("I6").numberFormat="0.00%"; s.getRange("H3:I6").format.font.bold=true; s.getRange("A1:I8").getEntireColumn().format.autofitColumns(); await ctx.sync(); });',
         "formula_info": {
             "name": "SUM",
-            "description": "Adds all numbers in a range. Used here to total income and tax owed across all rows, then the effective rate divides total tax by total income to show the real overall tax burden.",
-            "example": "=SUM(C2:C8)  /  =I5/I4"
+            "example": "=SUM(C2:C8)",
+            "description": "SUM(number1, ...) totals a range — here C2:C8 sums all Gross Amounts into Total Income (I4) and E2:E8 sums all Tax Owed into I5. The Effective Rate cell then divides I5 by I4, giving the actual percentage of income paid in tax across all sources.",
         },
     },
 ]
@@ -289,8 +289,8 @@ STUB_INVENTORY = [
         "code": 'await Excel.run(async (ctx) => { const s=ctx.workbook.worksheets.getActiveWorksheet(); for(let i=2;i<=9;i++){s.getRange("G"+i).formulas=[["=D"+i+"*F"+i]];} await ctx.sync(); });',
         "formula_info": {
             "name": "Multiplication formula",
-            "description": "Multiplies two cell values together. Used here to calculate Stock Value by multiplying the quantity in Stock (column D) by the Unit Cost (column F), so the total value updates automatically when either changes.",
-            "example": "=D2*F2"
+            "example": "=D2*F2",
+            "description": "The * operator multiplies two cell values directly. Here D2 is the Stock quantity and F2 is the Unit Cost, so =D2*F2 gives the total Stock Value for that row — and updates automatically whenever either value changes.",
         },
     },
     {

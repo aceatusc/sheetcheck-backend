@@ -136,8 +136,8 @@ _OFFICE_JS_RULES = (
 
 class FormulaInfo(BaseModel):
     name:        str = Field(description="Formula name e.g. 'VLOOKUP', 'SUMIF'")
-    description: str = Field(description="1-2 sentences: what the formula does in plain English")
     example:     str = Field(description="A concrete example as it would appear in a cell, e.g. =VLOOKUP(A2,Data!$B:$D,3,FALSE)")
+    description: str = Field(description="1-2 sentences: what the formula does its parameters using the provided example in plain English and ")
 
 
 class OfficeJSCode(BaseModel):
