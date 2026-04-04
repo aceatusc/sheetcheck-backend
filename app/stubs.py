@@ -56,6 +56,11 @@ STUB_PNL = [
         "edit_suggestions": ["Show growth as Revenue % instead","Format as integer %","Include E2 with N/A label"],
         "parameters": [{"label":"Number format","key":"0.0%","value":"0.0%","type":"text"}],
         "code": "await Excel.run(async (ctx) => { const s=ctx.workbook.worksheets.getActiveWorksheet(); s.getRange('E3:E7').formulas=[['=IFERROR((D3-D2)/D2,\"\")'],['=IFERROR((D4-D3)/D3,\"\")'],['=IFERROR((D5-D4)/D4,\"\")'],['=IFERROR((D6-D5)/D5,\"\")'],['=IFERROR((D7-D6)/D6,\"\")']];\ns.getRange('E3:E7').numberFormat=[['0.0%'],['0.0%'],['0.0%'],['0.0%'],['0.0%']]; await ctx.sync(); });",
+        "formula_info": {
+            "name": "IFERROR",
+            "description": "Evaluates an expression and returns its result if it succeeds, or a fallback value if the expression produces an error. Used here to suppress divide-by-zero errors when calculating month-over-month growth.",
+            "example": "=IFERROR((D3-D2)/D2, \"\")"
+        },
     },
     {
         "id": "seg-5", "description": "Format currency columns",
@@ -106,6 +111,11 @@ STUB_PNL = [
             {"label":"Font color","key":"#ffffff","value":"#ffffff","type":"color"},
         ],
         "code": 'await Excel.run(async (ctx) => { const s=ctx.workbook.worksheets.getActiveWorksheet(); s.getRange("A8").values=[["TOTAL"]]; s.getRange("B8:D8").formulas=[["=SUM(B2:B7)","=SUM(C2:C7)","=SUM(D2:D7)"]]; s.getRange("B8:D8").numberFormat=[["$#,##0","$#,##0","$#,##0"]]; const t=s.getRange("A8:E8"); t.format.fill.color="#1a1d27"; t.format.font.color="#ffffff"; t.format.font.bold=true; s.getRange("A1:E8").getEntireColumn().format.autofitColumns(); await ctx.sync(); });',
+        "formula_info": {
+            "name": "SUM",
+            "description": "Adds all numbers in a range of cells. Used here to total Revenue, Expenses, and Profit across the six monthly rows.",
+            "example": "=SUM(B2:B7)"
+        },
     },
 ]
 
@@ -189,6 +199,11 @@ STUB_SALES = [
             {"label":"Rounding decimals","key":"2","value":2,"type":"select","options":["0","1","2"]},
         ],
         "code": 'await Excel.run(async (ctx) => { const s=ctx.workbook.worksheets.getActiveWorksheet(); for(let i=2;i<=8;i++){ s.getRange("E"+i).formulas=[["=ROUND(C"+i+"*D"+i+",2)"]]; } s.getRange("C2:C8").numberFormat="$#,##0"; s.getRange("E2:E8").numberFormat="$#,##0.00"; await ctx.sync(); });',
+        "formula_info": {
+            "name": "ROUND",
+            "description": "Rounds a number to a specified number of decimal places. Used here to calculate tax owed to the cent, preventing the floating-point errors that bare multiplication can introduce.",
+            "example": "=ROUND(C2*D2, 2)"
+        },
     },
     {
         "id": "seg-6", "description": "Fill Status column with withholding logic",
@@ -221,6 +236,11 @@ STUB_SALES = [
             {"label":"Summary font","key":"#f5c842","value":"#f5c842","type":"color"},
         ],
         "code": 'await Excel.run(async (ctx) => { const s=ctx.workbook.worksheets.getActiveWorksheet(); s.getRange("H3").values=[["SUMMARY"]]; s.getRange("H3:I3").format.fill.color="#1a2744"; s.getRange("H3:I3").format.font.color="#f5c842"; s.getRange("H3:I3").format.font.bold=true; s.getRange("H4:I4").values=[["Total Income","=SUM(C2:C8)"]]; s.getRange("H5:I5").values=[["Total Tax Owed","=SUM(E2:E8)"]]; s.getRange("H6:I6").values=[["Effective Rate","=I5/I4"]]; s.getRange("I4:I5").numberFormat="$#,##0.00"; s.getRange("I6").numberFormat="0.00%"; s.getRange("H3:I6").format.font.bold=true; s.getRange("A1:I8").getEntireColumn().format.autofitColumns(); await ctx.sync(); });',
+        "formula_info": {
+            "name": "SUM",
+            "description": "Adds all numbers in a range. Used here to total income and tax owed across all rows, then the effective rate divides total tax by total income to show the real overall tax burden.",
+            "example": "=SUM(C2:C8)  /  =I5/I4"
+        },
     },
 ]
 
@@ -267,6 +287,11 @@ STUB_INVENTORY = [
         "edit_suggestions": ["Include a discount factor","Round to 2 decimal places","Show value in thousands"],
         "parameters": [],
         "code": 'await Excel.run(async (ctx) => { const s=ctx.workbook.worksheets.getActiveWorksheet(); for(let i=2;i<=9;i++){s.getRange("G"+i).formulas=[["=D"+i+"*F"+i]];} await ctx.sync(); });',
+        "formula_info": {
+            "name": "Multiplication formula",
+            "description": "Multiplies two cell values together. Used here to calculate Stock Value by multiplying the quantity in Stock (column D) by the Unit Cost (column F), so the total value updates automatically when either changes.",
+            "example": "=D2*F2"
+        },
     },
     {
         "id": "seg-5", "description": "Highlight low-stock items",
