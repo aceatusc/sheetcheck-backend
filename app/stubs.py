@@ -1,5 +1,5 @@
 """
-stubs.py — Three canned demo tasks for the SheetCheck landing page.
+stubs.py — Three canned demo tasks for the Pista landing page.
 
 Each stub is a complete set of segments that can be triggered without
 hitting the LLM. Activated by sending "stub:KEY" as the message.
@@ -120,7 +120,7 @@ STUB_PNL = [
 ]
 
 # ── Demo 2: Tax Filing Summary ────────────────────────────────────────────
-# Designed to showcase every SheetCheck feature:
+# Designed to showcase every Pista feature:
 #   Parameters: number (threshold), select (tax bracket), color (status colors)
 #   Edit + branching: change tax rate mid-chain → new branch in graph
 #   Ask panel: explain ROUND() formula choice

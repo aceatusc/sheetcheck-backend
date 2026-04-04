@@ -1,4 +1,4 @@
-"""dspy_programs.py -- DSPy signatures and programs for SheetCheck."""
+"""dspy_programs.py -- DSPy signatures and programs for Pista."""
 from __future__ import annotations
 
 import logging
