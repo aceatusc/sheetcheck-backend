@@ -349,9 +349,9 @@ STUB_RUBRICS = {
     "sales": {
         "stub_key": "sales",
         "aspects": [
-            {"id":"a1","label":"Catch errors like mismatched totals, duplicate entries, or out-of-range values"},
-            {"id":"a2","label":"Ensure all income streams are accounted for (wages, freelance, investments, etc.)"},
-            {"id":"a3","label":"Apply the correct tax brackets (according to IRS), deductions, and credits based on filing status"},
+            {"id":"a1","label":"Tax brackets are visually colour-coded by rate so different rates are immediately distinguishable"},
+            {"id":"a2","label":"Tax Owed formulas use ROUND to avoid floating-point cent errors"},
+            {"id":"a3","label":"Summary section shows Total Income, Total Tax Owed, and Effective Rate"},
         ],
     },
     "inventory": {
