@@ -1,5 +1,5 @@
 """
-server.py -- SheetCheck API proxy
+server.py -- Pista API proxy
 """
 
 import logging

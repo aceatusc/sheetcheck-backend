@@ -1,4 +1,4 @@
-"""dspy_programs.py -- DSPy signatures and programs for SheetCheck."""
+"""dspy_programs.py -- DSPy signatures and programs for Pista."""
 from __future__ import annotations
 
 import logging
@@ -134,6 +134,12 @@ _OFFICE_JS_RULES = (
 
 
 
+class FormulaInfo(BaseModel):
+    name:        str = Field(description="Formula name e.g. 'VLOOKUP', 'SUMIF'")
+    example:     str = Field(description="A concrete example as it would appear in a cell, e.g. =VLOOKUP(A2,Data!$B:$D,3,FALSE)")
+    description: str = Field(description="1-2 sentences: what the formula does its parameters using the provided example in plain English and ")
+
+
 class OfficeJSCode(BaseModel):
     model_config = ConfigDict(extra="allow")
     code: str = Field(description=_OFFICE_JS_RULES)
@@ -156,6 +162,7 @@ class Segment(BaseModel):
     parameters:       list[SegmentParameter] = Field(default_factory=list, description="Tweakable constants")
     code:             OfficeJSCode           = Field(description="Office JS for this step")
     manual_steps:     str                    = Field(default="", description="Manual Excel UI steps if automation fails")
+    formula_info:     Optional[FormulaInfo]  = Field(default=None, description="If this step writes a formula to cells, describe it.")
 
     @field_validator("code", mode="before")
     @classmethod

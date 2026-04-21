@@ -1,5 +1,5 @@
 """
-stubs.py — Three canned demo tasks for the SheetCheck landing page.
+stubs.py — Three canned demo tasks for the Pista landing page.
 
 Each stub is a complete set of segments that can be triggered without
 hitting the LLM. Activated by sending "stub:KEY" as the message.
@@ -56,6 +56,11 @@ STUB_PNL = [
         "edit_suggestions": ["Show growth as Revenue % instead","Format as integer %","Include E2 with N/A label"],
         "parameters": [{"label":"Number format","key":"0.0%","value":"0.0%","type":"text"}],
         "code": "await Excel.run(async (ctx) => { const s=ctx.workbook.worksheets.getActiveWorksheet(); s.getRange('E3:E7').formulas=[['=IFERROR((D3-D2)/D2,\"\")'],['=IFERROR((D4-D3)/D3,\"\")'],['=IFERROR((D5-D4)/D4,\"\")'],['=IFERROR((D6-D5)/D5,\"\")'],['=IFERROR((D7-D6)/D6,\"\")']];\ns.getRange('E3:E7').numberFormat=[['0.0%'],['0.0%'],['0.0%'],['0.0%'],['0.0%']]; await ctx.sync(); });",
+        "formula_info": {
+            "name": "IFERROR",
+            "example": "=IFERROR((D3-D2)/D2, \"\")",
+            "description": "IFERROR(value, value_if_error) runs the first argument and returns the second if it errors. Here (D3-D2)/D2 computes profit growth from the previous month — if D2 is zero the division would error, so IFERROR returns an empty string instead.",
+        },
     },
     {
         "id": "seg-5", "description": "Format currency columns",
@@ -106,11 +111,16 @@ STUB_PNL = [
             {"label":"Font color","key":"#ffffff","value":"#ffffff","type":"color"},
         ],
         "code": 'await Excel.run(async (ctx) => { const s=ctx.workbook.worksheets.getActiveWorksheet(); s.getRange("A8").values=[["TOTAL"]]; s.getRange("B8:D8").formulas=[["=SUM(B2:B7)","=SUM(C2:C7)","=SUM(D2:D7)"]]; s.getRange("B8:D8").numberFormat=[["$#,##0","$#,##0","$#,##0"]]; const t=s.getRange("A8:E8"); t.format.fill.color="#1a1d27"; t.format.font.color="#ffffff"; t.format.font.bold=true; s.getRange("A1:E8").getEntireColumn().format.autofitColumns(); await ctx.sync(); });',
+        "formula_info": {
+            "name": "SUM",
+            "example": "=SUM(B2:B7)",
+            "description": "SUM(number1, [number2], ...) adds all values in the given range. Here B2:B7 spans the six monthly Revenue figures, so the result is the full six-month total placed in the TOTAL row.",
+        },
     },
 ]
 
 # ── Demo 2: Tax Filing Summary ────────────────────────────────────────────
-# Designed to showcase every SheetCheck feature:
+# Designed to showcase every Pista feature:
 #   Parameters: number (threshold), select (tax bracket), color (status colors)
 #   Edit + branching: change tax rate mid-chain → new branch in graph
 #   Ask panel: explain ROUND() formula choice
@@ -189,6 +199,11 @@ STUB_SALES = [
             {"label":"Rounding decimals","key":"2","value":2,"type":"select","options":["0","1","2"]},
         ],
         "code": 'await Excel.run(async (ctx) => { const s=ctx.workbook.worksheets.getActiveWorksheet(); for(let i=2;i<=8;i++){ s.getRange("E"+i).formulas=[["=ROUND(C"+i+"*D"+i+",2)"]]; } s.getRange("C2:C8").numberFormat="$#,##0"; s.getRange("E2:E8").numberFormat="$#,##0.00"; await ctx.sync(); });',
+        "formula_info": {
+            "name": "ROUND",
+            "example": "=ROUND(C2*D2, 2)",
+            "description": "ROUND(number, num_digits) rounds the first argument to the number of decimal places given by the second. Here C2*D2 multiplies Gross Amount by Tax Rate, and 2 rounds the result to cents — preventing the tiny floating-point errors that bare multiplication can accumulate.",
+        },
     },
     {
         "id": "seg-6", "description": "Fill Status column with withholding logic",
@@ -221,6 +236,11 @@ STUB_SALES = [
             {"label":"Summary font","key":"#f5c842","value":"#f5c842","type":"color"},
         ],
         "code": 'await Excel.run(async (ctx) => { const s=ctx.workbook.worksheets.getActiveWorksheet(); s.getRange("H3").values=[["SUMMARY"]]; s.getRange("H3:I3").format.fill.color="#1a2744"; s.getRange("H3:I3").format.font.color="#f5c842"; s.getRange("H3:I3").format.font.bold=true; s.getRange("H4:I4").values=[["Total Income","=SUM(C2:C8)"]]; s.getRange("H5:I5").values=[["Total Tax Owed","=SUM(E2:E8)"]]; s.getRange("H6:I6").values=[["Effective Rate","=I5/I4"]]; s.getRange("I4:I5").numberFormat="$#,##0.00"; s.getRange("I6").numberFormat="0.00%"; s.getRange("H3:I6").format.font.bold=true; s.getRange("A1:I8").getEntireColumn().format.autofitColumns(); await ctx.sync(); });',
+        "formula_info": {
+            "name": "SUM",
+            "example": "=SUM(C2:C8)",
+            "description": "SUM(number1, ...) totals a range — here C2:C8 sums all Gross Amounts into Total Income (I4) and E2:E8 sums all Tax Owed into I5. The Effective Rate cell then divides I5 by I4, giving the actual percentage of income paid in tax across all sources.",
+        },
     },
 ]
 
@@ -267,6 +287,11 @@ STUB_INVENTORY = [
         "edit_suggestions": ["Include a discount factor","Round to 2 decimal places","Show value in thousands"],
         "parameters": [],
         "code": 'await Excel.run(async (ctx) => { const s=ctx.workbook.worksheets.getActiveWorksheet(); for(let i=2;i<=9;i++){s.getRange("G"+i).formulas=[["=D"+i+"*F"+i]];} await ctx.sync(); });',
+        "formula_info": {
+            "name": "Multiplication formula",
+            "example": "=D2*F2",
+            "description": "The * operator multiplies two cell values directly. Here D2 is the Stock quantity and F2 is the Unit Cost, so =D2*F2 gives the total Stock Value for that row — and updates automatically whenever either value changes.",
+        },
     },
     {
         "id": "seg-5", "description": "Highlight low-stock items",
@@ -324,11 +349,9 @@ STUB_RUBRICS = {
     "sales": {
         "stub_key": "sales",
         "aspects": [
-            {"id":"a1","label":"Headers should include Description, Gross Amount, Tax Rate, Tax Owed."},
-            {"id":"a2","label":"Tax brackets are visually colour-coded by rate so different rates are immediately distinguishable"},
-            {"id":"a3","label":"Status column clearly distinguishes Withheld rows from Owed rows"},
-            {"id":"a4","label":"Tax Owed formulas use ROUND to avoid floating-point cent errors"},
-            {"id":"a5","label":"Summary section shows Total Income, Total Tax Owed, and Effective Rate"},
+            {"id":"a1","label":"Tax brackets are visually colour-coded by rate so different rates are immediately distinguishable"},
+            {"id":"a2","label":"Tax Owed formulas use ROUND to avoid floating-point cent errors"},
+            {"id":"a3","label":"Summary section shows Total Income, Total Tax Owed, and Effective Rate"},
         ],
     },
     "inventory": {
